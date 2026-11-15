@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>إقفال الفترة — النظام المحاسبي</title>
+<link rel="stylesheet" href="assets/css/style.css?v=12">
+</head>
+<body data-page-title="إقفال الفترة">
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+      <div class="panel">
+        <div class="panel-head"><h3>🔒 إقفال الفترة</h3>
+          <div class="toolbar">
+            <button class="btn btn-teal btn-sm" onclick="showPeriod()">عرض</button>
+            <button class="btn btn-dark btn-sm" onclick="exportPeriod()">تصدير Excel</button>
+            <button class="btn btn-gold btn-sm" onclick="printPeriod()">طباعة</button>
+            <button class="btn btn-gold btn-sm" id="btn-close" style="display:none" onclick="postClose()">ترحيل قيد الإقفال</button>
+          </div>
+        </div>
+        <div class="filters">
+          <div class="field"><label>من تاريخ</label><input id="c-from" type="date"></div>
+          <div class="field"><label>إلى تاريخ</label><input id="c-to" type="date"></div>
+          <div class="field"><label>المنطقة</label><select id="c-region"></select></div>
+        </div>
+        <div class="panel-body hint" id="close-note">يعرض كل القيود المرحلة داخل الفترة، ثم يُقفل الإيرادات والمصروفات في حساب الأرباح المحتجزة.</div>
+      </div>
+      <div class="cards-grid" style="margin-top:16px">
+        <div class="card"><div class="lbl">عدد القيود</div><div class="val" id="sum-cnt">—</div></div>
+        <div class="card teal"><div class="lbl">إيرادات الفترة</div><div class="val teal" id="sum-rev">—</div></div>
+        <div class="card red"><div class="lbl">مصروفات الفترة</div><div class="val red" id="sum-exp">—</div></div>
+        <div class="card green"><div class="lbl">صافي الربح / (الخسارة)</div><div class="val green" id="sum-net">—</div></div>
+      </div>
+      <div class="panel" style="margin-top:16px">
+        <div class="panel-head"><h3>الإيرادات والمصروفات</h3></div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th class="num">رقم الحساب</th><th>الاسم</th><th>النوع</th><th class="num">صافي الحركة</th></tr></thead>
+            <tbody id="pl-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:16px">
+        <div class="panel-head"><h3>كل قيود ومعاملات الفترة</h3></div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th class="num">رقم الحركة</th><th class="num">التاريخ</th><th>البيان</th><th>الحساب</th><th>النوع</th><th class="num">مدين</th><th class="num">دائن</th></tr></thead>
+            <tbody id="close-lines"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <footer class="footer-note">© جميع الحقوق محفوظة — <b>محاسب / محمد احمد</b></footer>
+  </main>
+</div>
+<script src="assets/js/vendor/supabase.js?v=3"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="assets/js/config.js?v=3"></script>
+<script src="assets/js/supabaseClient.js?v=4"></script>
+<script src="assets/js/common.js?v=3"></script>
+<script src="assets/js/auth.js?v=15"></script>
+<script src="assets/js/db.js?v=15"></script>
+<script src="assets/js/ext-store.js?v=7"></script>
+<script src="assets/js/pages/period-close.js?v=1"></script>
+<script type="module" src="assets/js/firebase-init.js?v=3"></script>
+
+<script>
+(function () {
+  var css = document.createElement('style');
+  css.textContent = '@media (max-width:900px){'
+    + '.menu-btn{display:inline-flex!important;align-items:center;justify-content:center;width:44px;height:44px;min-width:44px;border:0;border-radius:12px;background:linear-gradient(145deg,#e8c56a,#b9862b);color:#161006;font-size:22px;font-weight:800;}'
+    + '.layout{flex-direction:row!important;}'
+    + '.sidebar{display:none!important;position:fixed!important;top:0;right:0;left:auto;width:min(300px,88vw)!important;height:100vh!important;z-index:90;flex-direction:column!important;flex-wrap:nowrap!important;overflow:auto;background:#12182a;}'
+    + '.sidebar.open{display:flex!important;}'
+    + '.sidebar .nav{flex-direction:column!important;flex-wrap:nowrap!important;width:100%;}'
+    + '.drawer-close{display:inline-flex!important;margin-right:auto;width:36px;height:36px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:transparent;color:#fff;font-size:18px;}'
+    + '.sidebar-backdrop.show{display:block;position:fixed;inset:0;background:rgba(5,8,15,.6);z-index:85;}'
+    + '}'
+    + '.sidebar-backdrop{display:none;}';
+  document.head.appendChild(css);
+  function close() {
+    var s = document.getElementById('sidebar');
+    var b = document.getElementById('sidebar-backdrop');
+    if (s) s.classList.remove('open');
+    if (b) b.classList.remove('show');
+  }
+  function open() {
+    var s = document.getElementById('sidebar');
+    var b = document.getElementById('sidebar-backdrop');
+    if (s) s.classList.add('open');
+    if (b) b.classList.add('show');
+  }
+  function boot() {
+    var top = document.getElementById('topbar');
+    var side = document.getElementById('sidebar');
+    if (!top || !side || !side.querySelector('a')) return false;
+    if (!document.getElementById('sidebar-backdrop')) {
+      var bd = document.createElement('div');
+      bd.id = 'sidebar-backdrop';
+      bd.className = 'sidebar-backdrop';
+      document.body.appendChild(bd);
+      bd.addEventListener('click', close);
+    }
+    if (!document.getElementById('menuBtn')) {
+      var btn = document.createElement('button');
+      btn.id = 'menuBtn';
+      btn.className = 'menu-btn';
+      btn.type = 'button';
+      btn.setAttribute('aria-label', 'القائمة');
+      btn.textContent = '\u2630';
+      top.insertBefore(btn, top.firstChild);
+    }
+    var brand = side.querySelector('.brand');
+    if (brand && !document.getElementById('drawerClose')) {
+      var x = document.createElement('button');
+      x.id = 'drawerClose';
+      x.className = 'drawer-close';
+      x.type = 'button';
+      x.textContent = '\u2715';
+      brand.appendChild(x);
+      x.addEventListener('click', close);
+    }
+    document.getElementById('menuBtn').onclick = open;
+    side.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', close); });
+    return true;
+  }
+  var n = 0;
+  var timer = setInterval(function () { if (boot() || ++n > 50) clearInterval(timer); }, 200);
+})();
+</script>
+
+</body>
+</html>

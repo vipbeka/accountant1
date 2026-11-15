@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>العملاء والموظفون — النظام المحاسبي</title>
+<link rel="stylesheet" href="assets/css/style.css?v=12">
+</head>
+<body data-page-title="العملاء والموظفون">
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+      <div class="panel">
+        <div class="panel-head">
+          <h3>👥 العملاء · الموردون · الموظفون</h3>
+          <div class="seg" id="kind-tabs">
+            <button class="btn btn-sm btn-gold" data-k="">الكل</button>
+            <button class="btn btn-sm btn-dark" data-k="customer">عملاء</button>
+            <button class="btn btn-sm btn-dark" data-k="vendor">موردون</button>
+            <button class="btn btn-sm btn-dark" data-k="employee">موظفون</button>
+          </div>
+          <div class="toolbar" id="toolbar"></div>
+        </div>
+        <div class="filters">
+          <div class="field"><label>بحث</label><input id="flt-q" type="text" placeholder="اسم / هاتف / رقم"></div>
+          <button class="btn btn-teal" onclick="renderList()">🔍 عرض</button>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th class="num">الرمز</th><th>الاسم</th><th>النوع</th><th>الهاتف</th>
+                <th>الرقم الضريبي</th><th class="num">الراتب</th><th class="num">الرصيد</th><th class="num">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="p-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="modal-overlay" id="pModal">
+        <div class="modal">
+          <div class="modal-head"><h3 id="p-title">طرف جديد</h3>
+            <button class="modal-close" data-close-modal>×</button></div>
+          <div class="modal-body">
+            <input type="hidden" id="p-id">
+            <div class="field"><label>النوع *</label>
+              <select id="p-kind">
+                <option value="customer">عميل</option>
+                <option value="vendor">مورد</option>
+                <option value="employee">موظف</option>
+              </select></div>
+            <div class="field"><label>الاسم *</label><input id="p-name" type="text"></div>
+            <div class="field"><label>الهاتف</label><input id="p-phone" type="text"></div>
+            <div class="field"><label>الرقم الضريبي / الهوية</label><input id="p-tax" type="text"></div>
+            <div class="field"><label>العنوان</label><input id="p-addr" type="text"></div>
+            <div class="field"><label>الراتب الشهري (للموظف)</label><input id="p-salary" type="number" step="0.01" value="0"></div>
+            <div class="field"><label>ملاحظات</label><textarea id="p-notes"></textarea></div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-gold" onclick="saveParty()">حفظ</button>
+            <button class="btn btn-dark" data-close-modal>إلغاء</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <footer class="footer-note">© جميع الحقوق محفوظة — <b>محاسب / محمد احمد</b></footer>
+  </main>
+</div>
+<script src="assets/js/vendor/supabase.js?v=3"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="assets/js/config.js?v=3"></script>
+<script src="assets/js/supabaseClient.js?v=4"></script>
+<script src="assets/js/common.js?v=3"></script>
+<script src="assets/js/auth.js?v=15"></script>
+<script src="assets/js/db.js?v=15"></script>
+<script src="assets/js/ext-store.js?v=7"></script>
+<script src="assets/js/pages/parties.js?v=2"></script>
+<script type="module" src="assets/js/firebase-init.js?v=3"></script>
+
+<script>
+(function () {
+  var css = document.createElement('style');
+  css.textContent = '@media (max-width:900px){'
+    + '.menu-btn{display:inline-flex!important;align-items:center;justify-content:center;width:44px;height:44px;min-width:44px;border:0;border-radius:12px;background:linear-gradient(145deg,#e8c56a,#b9862b);color:#161006;font-size:22px;font-weight:800;}'
+    + '.layout{flex-direction:row!important;}'
+    + '.sidebar{display:none!important;position:fixed!important;top:0;right:0;left:auto;width:min(300px,88vw)!important;height:100vh!important;z-index:90;flex-direction:column!important;flex-wrap:nowrap!important;overflow:auto;background:#12182a;}'
+    + '.sidebar.open{display:flex!important;}'
+    + '.sidebar .nav{flex-direction:column!important;flex-wrap:nowrap!important;width:100%;}'
+    + '.drawer-close{display:inline-flex!important;margin-right:auto;width:36px;height:36px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:transparent;color:#fff;font-size:18px;}'
+    + '.sidebar-backdrop.show{display:block;position:fixed;inset:0;background:rgba(5,8,15,.6);z-index:85;}'
+    + '}'
+    + '.sidebar-backdrop{display:none;}';
+  document.head.appendChild(css);
+  function close() {
+    var s = document.getElementById('sidebar');
+    var b = document.getElementById('sidebar-backdrop');
+    if (s) s.classList.remove('open');
+    if (b) b.classList.remove('show');
+  }
+  function open() {
+    var s = document.getElementById('sidebar');
+    var b = document.getElementById('sidebar-backdrop');
+    if (s) s.classList.add('open');
+    if (b) b.classList.add('show');
+  }
+  function boot() {
+    var top = document.getElementById('topbar');
+    var side = document.getElementById('sidebar');
+    if (!top || !side || !side.querySelector('a')) return false;
+    if (!document.getElementById('sidebar-backdrop')) {
+      var bd = document.createElement('div');
+      bd.id = 'sidebar-backdrop';
+      bd.className = 'sidebar-backdrop';
+      document.body.appendChild(bd);
+      bd.addEventListener('click', close);
+    }
+    if (!document.getElementById('menuBtn')) {
+      var btn = document.createElement('button');
+      btn.id = 'menuBtn';
+      btn.className = 'menu-btn';
+      btn.type = 'button';
+      btn.setAttribute('aria-label', 'القائمة');
+      btn.textContent = '\u2630';
+      top.insertBefore(btn, top.firstChild);
+    }
+    var brand = side.querySelector('.brand');
+    if (brand && !document.getElementById('drawerClose')) {
+      var x = document.createElement('button');
+      x.id = 'drawerClose';
+      x.className = 'drawer-close';
+      x.type = 'button';
+      x.textContent = '\u2715';
+      brand.appendChild(x);
+      x.addEventListener('click', close);
+    }
+    document.getElementById('menuBtn').onclick = open;
+    side.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', close); });
+    return true;
+  }
+  var n = 0;
+  var timer = setInterval(function () { if (boot() || ++n > 50) clearInterval(timer); }, 200);
+})();
+</script>
+
+</body>
+</html>

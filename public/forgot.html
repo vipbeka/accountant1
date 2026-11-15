@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>استعادة كلمة المرور — النظام المحاسبي</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="logo-circle">ح</div>
+      <h1>استعادة كلمة المرور</h1>
+      <p class="sub">عبر سؤال الأمان الخاص بحسابك</p>
+
+      <div id="errorBox" class="alert err" style="display:none"></div>
+      <div id="okBox" class="alert ok" style="display:none"></div>
+
+      <form id="stepAsk">
+        <div class="field">
+          <label>اسم المستخدم</label>
+          <input type="text" name="username" required autofocus placeholder="admin">
+        </div>
+        <button type="submit" class="btn btn-gold btn-block">متابعة</button>
+      </form>
+
+      <form id="stepAnswer" style="display:none">
+        <div class="field"><label id="questionLabel">سؤال الأمان</label></div>
+        <div class="field">
+          <label>الإجابة</label>
+          <input type="text" name="answer" required>
+        </div>
+        <div class="field">
+          <label>كلمة المرور الجديدة</label>
+          <input type="password" name="new_password" required placeholder="8 أحرف على الأقل، حروف وأرقام">
+        </div>
+        <button type="submit" class="btn btn-gold btn-block">تغيير كلمة المرور</button>
+      </form>
+
+      <p style="margin-top:14px;text-align:center">
+        <a href="login.html" style="color:var(--gold)">العودة لتسجيل الدخول</a>
+      </p>
+    </div>
+  </div>
+
+<script src="assets/js/vendor/supabase.js?v=3"></script>
+<script src="assets/js/config.js?v=3"></script>
+<script src="assets/js/supabaseClient.js?v=3"></script>
+<script src="assets/js/common.js?v=3"></script>
+<script src="assets/js/pages/forgot.js?v=7"></script>
+<script type="module" src="assets/js/firebase-init.js?v=3"></script>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>دليل الاستخدام — النظام المحاسبي</title>
+<link rel="stylesheet" href="assets/css/style.css?v=12">
+<style>
+  .help-body h4 { color: var(--gold); margin: 22px 0 10px; font-size: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .help-body p, .help-body li { line-height: 2; font-size: 14px; color: var(--text); }
+  .help-body ol, .help-body ul { padding-right: 24px; margin: 8px 0; }
+  .help-body table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  .help-body th, .help-body td { border: 1px solid var(--border); padding: 9px 12px; text-align: right; }
+  .help-body th { background: var(--bg2); color: var(--gold); }
+  .help-note { background: rgba(217,164,65,.08); border: 1px solid rgba(217,164,65,.3); border-radius: 10px; padding: 12px 16px; margin: 12px 0; font-size: 13.5px; }
+  .help-warn { background: rgba(248,113,113,.07); border: 1px solid rgba(248,113,113,.3); border-radius: 10px; padding: 12px 16px; margin: 12px 0; font-size: 13.5px; }
+  @media print {
+    .sidebar, .topbar, .footer-note, .panel-head .btn { display: none !important; }
+    body { background: #fff !important; }
+    .help-body p, .help-body li, .help-body td, .help-body th { color: #000 !important; }
+    .panel { border: none; }
+  }
+</style>
+</head>
+<body data-page-title="دليل الاستخدام">
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+      <div class="panel">
+        <div class="panel-head">
+          <h3>📘 دليل استخدام النظام</h3>
+          <button class="btn btn-gold btn-sm" onclick="window.print()">🖨️ طباعة الدليل</button>
+        </div>
+        <div class="panel-body help-body">
+
+          <h4>1️⃣ الفكرة العامة</h4>
+          <p>النظام محاسبي مزدوج القيد: أي عملية تُسجَّل كـ<strong>قيد يومية</strong> بطرف مدين وطرف دائن متساويين. القيود تُسجَّل أولًا كـ«مسودة»، وبعد المراجعة تُرحَّل لتدخل في التقارير الرسمية (الأستاذ العام وميزان المراجعة).</p>
+          <div class="help-note">💡 <b>سير العمل اليومي:</b> راجع دليل الحسابات ← سجّل القيد (مسودة) ← راجعه ← رحّله ← اطلع التقارير وصدّرها Excel.</div>
+
+          <h4>2️⃣ الدخول والصلاحيات</h4>
+          <ul>
+            <li><b>مدير النظام:</b> كل شيء + إدارة المستخدمين + سجل العمليات + المناطق والإعدادات العامة.</li>
+            <li><b>محاسب:</b> إدخال وتعديل وترحيل القيود + الحسابات + التقارير + الاستيراد والتصدير.</li>
+            <li><b>مشاهدة فقط:</b> استعراض وتصفح وتصدير بدون أي إضافة أو تعديل.</li>
+          </ul>
+          <p>🔑 <b>تغيير كلمة المرور:</b> أي مستخدم يقدر يغيّر كلمة مروره بنفسه من صفحة «الإعدادات». <b>سياسة الأمان:</b> 8 أحرف على الأقل وتحتوي حروف وأرقام معًا.</p>
+
+          <h4>3️⃣ دليل الحسابات وشجرة الحسابات</h4>
+          <ol>
+            <li>افتح «دليل الحسابات» وتأكد إن كل الحسابات اللي هتحتاجها موجودة (صندوق، بنك، موردين، رواتب...).</li>
+            <li>لإضافة حساب: «➕ حساب جديد» ثم اكتب <b>رقم الحساب</b> و<b>اسم الحساب</b> (والنوع اختياري لكن ينظم البحث والتقارير).</li>
+            <li><b>الرصيد الافتتاحي:</b> اتركه صفرًا لو بتبدأ من جديد. استخدمه فقط لو في أرصدة قديمة مستمرة.</li>
+            <li>حساب عليه حركات لا يمكن حذفه — حماية للبيانات.</li>
+          </ol>
+          <p>🌳 <b>شجرة الحسابات:</b> عرض شجري للحسابات مقسّمة حسب النوع ثم المجموعة (أول رقمين من رقم الحساب).</p>
+
+          <h4>4️⃣ قيود اليومية</h4>
+          <table>
+            <tr><th>الخانة</th><th>تعبئة إيه؟</th></tr>
+            <tr><td>رقم الحركة</td><td><b>تكتبه بنفسك</b> بشرط ألا يتكرر</td></tr>
+            <tr><td>التاريخ</td><td>تاريخ العملية الفعلي</td></tr>
+            <tr><td>المنطقة</td><td>المركز الرئيسي أو المنطقة التابع لها القيد</td></tr>
+            <tr><td>نوع القيد</td><td>عادي / تسوية / افتتاحي / إقفال</td></tr>
+            <tr><td>السطور</td><td>اختر الحساب واكتب المبلغ مدين أو دائن (مش الاتنين مع بعض)</td></tr>
+          </table>
+          <div class="help-note">✅ لازم: سطرين على الأقل + إجمالي المدين = إجمالي الدائن.</div>
+          <p><b>الحالات:</b> «💾 حفظ كمسودة» للمراجعة لاحقًا — «✅ حفظ وترحيل» للتسجيل النهائي. بعد الترحيل لا يمكن تعديل القيد إلا بعد إلغاء الترحيل، وحذف القيود المرحلة لمدير النظام فقط.</p>
+          <div class="alert err" style="font-size:12.5px">
+            <b>🧹 مسح القيود بالجملة (لمدير النظام فقط):</b> من دفتر اليومية زر «مسح قيود» يتيح حذف قيود شهر محدد أو جميع القيود دفعة واحدة، بتأكيد مرتين، ويُسجَّل في سجل العمليات.
+          </div>
+
+          <h4>5️⃣ الاستيراد من إكسيل</h4>
+          <ul>
+            <li>ملف الحسابات: أعمدة «رقم الحساب» و«اسم الحساب» و«النوع» (اختياري).</li>
+            <li>ملف القيود: كل الصفوف بنفس «رقم الحركة» تُستورد كقيد واحد متعدد السطور، حساب غير موجود يُنشأ تلقائيًا، وقيد غير متوازن يُستورد كمسودة.</li>
+          </ul>
+
+          <h4>5️⃣ب الفواتير · السندات · العملاء</h4>
+          <ul>
+            <li><b>الفواتير:</b> مبيعات أو مشتريات ببنود وضريبة. عند «حفظ وترحيل» يُنشأ قيد يومية متوازن برقم الفاتورة ويظهر في دفتر اليومية وميزان المراجعة.</li>
+            <li><b>سندات القبض والصرف:</b> قبض من عميل / صرف لمورد / راتب موظف. يمكن ربط السند بفاتورة مفتوحة. الترحيل = قيد يومية.</li>
+            <li><b>العملاء والموظفون:</b> سجل أطراف (عميل / مورد / موظف) مع الرصيد من الفواتير والسندات.</li>
+            <li><b>مركز التقارير:</b> روابط التقارير الرسمية + أعمار ديون العملاء + ملخص الضريبة من الفواتير المرحلة.</li>
+          </ul>
+          <div class="help-note">💡 بيانات الفواتير والأطراف والسندات تُحفظ في قاعدة البيانات (Supabase) مثل القيود والحسابات، وتظهر لكل المستخدمين على أي جهاز بعد تسجيل الدخول.</div>
+
+          <h4>6️⃣ التقارير والتصدير</h4>
+          <ul>
+            <li><b>الأستاذ العام:</b> اختر رقم الحساب + الفترة = كشف حساب بالرصيد الجاري.</li>
+            <li><b>ميزان المراجعة:</b> أرصدة افتتاحية + حركة الفترة + أرصدة نهائية.</li>
+            <li><b>الموازنة التقديرية:</b> مقارنة الميزانية المخططة بالمنفّذ لكل حساب.</li>
+            <li><b>قائمة الدخل:</b> الإيرادات والمصروفات وصافي الدخل أو الخسارة.</li>
+            <li><b>المركز المالي:</b> الموجودات مقابل الالتزامات وحقوق الملكية.</li>
+            <li><b>التدفقات النقدية:</b> حركة حسابات الصندوق والبنوك.</li>
+            <li><b>تصدير Excel:</b> زر «📊 تصدير» في كل صفحة يُنزّل ملف xlsx مباشرة من المتصفح.</li>
+          </ul>
+          <div class="help-note">📌 القيود غير المرحلة (المسودات) لا تظهر في الأستاذ العام ولا ميزان المراجعة نهائيًا.</div>
+
+          <h4>7️⃣ الأمان والنسخ الاحتياطي</h4>
+          <ul>
+            <li>البيانات محفوظة على Supabase (Postgres) — النسخ الاحتياطي التلقائي يُدار من إعدادات مشروع Supabase نفسه.</li>
+            <li>مدير النظام يقدر يغيّر كلمات المرور لأي مستخدم من صفحة المستخدمين.</li>
+            <li>صفحة «سجل العمليات» توثّق كل إجراء: مين عمل إيه وامتى.</li>
+            <li><b>سياسة كلمة المرور:</b> 8 أحرف على الأقل + حروف + أرقام.</li>
+          </ul>
+
+          <h4>8️⃣ أسئلة شائعة</h4>
+          <table>
+            <tr><th>السؤال</th><th>الجواب</th></tr>
+            <tr><td>القيد اتسجل غلط!</td><td>لو مسودة: عدّله عادي. لو مرحل: إلغاء الترحيل ← عدّل ← رحّل تاني</td></tr>
+            <tr><td>رقم الحركة "مستخدم بالفعل"</td><td>الرقم متكرر — اختر رقمًا مختلفًا</td></tr>
+            <tr><td>التقرير مش فيه قيودي</td><td>غالبًا لسه مسودات — ادخل دفتر اليومية ورحّلها</td></tr>
+            <tr><td>ميزان المراجعة مش متوازن</td><td>راجع الأرصدة الافتتاحية للحسابات</td></tr>
+            <tr><td>عاوز أعرف مين مسح/عدّل</td><td>صفحة سجل العمليات (لمدير النظام)</td></tr>
+            <tr><td>نسيت كلمة المرور</td><td>استخدم «نسيت كلمة المرور؟» في صفحة الدخول، أو اطلب من مدير النظام إعادة تعيينها</td></tr>
+          </table>
+
+          <p style="text-align:center;margin-top:26px;color:var(--muted)">© جميع الحقوق محفوظة — <b style="color:var(--gold)">محاسب / محمد احمد</b></p>
+        </div>
+      </div>
+    </div>
+    <footer class="footer-note">© جميع الحقوق محفوظة — <b>محاسب / محمد احمد</b></footer>
+  </main>
+</div>
+<script src="assets/js/vendor/supabase.js?v=3"></script>
+<script src="assets/js/config.js?v=3"></script>
+<script src="assets/js/supabaseClient.js?v=4"></script>
+<script src="assets/js/common.js?v=3"></script>
+<script src="assets/js/auth.js?v=15"></script>
+<script>APP.requireAuth({ activePath: 'help.html' });</script>
+<script type="module" src="assets/js/firebase-init.js?v=3"></script>
+
+<script>
+(function () {
+  var css = document.createElement('style');
+  css.textContent = '@media (max-width:900px){'
+    + '.menu-btn{display:inline-flex!important;align-items:center;justify-content:center;width:44px;height:44px;min-width:44px;border:0;border-radius:12px;background:linear-gradient(145deg,#e8c56a,#b9862b);color:#161006;font-size:22px;font-weight:800;}'
+    + '.layout{flex-direction:row!important;}'
+    + '.sidebar{display:none!important;position:fixed!important;top:0;right:0;left:auto;width:min(300px,88vw)!important;height:100vh!important;z-index:90;flex-direction:column!important;flex-wrap:nowrap!important;overflow:auto;background:#12182a;}'
+    + '.sidebar.open{display:flex!important;}'
+    + '.sidebar .nav{flex-direction:column!important;flex-wrap:nowrap!important;width:100%;}'
+    + '.drawer-close{display:inline-flex!important;margin-right:auto;width:36px;height:36px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:transparent;color:#fff;font-size:18px;}'
+    + '.sidebar-backdrop.show{display:block;position:fixed;inset:0;background:rgba(5,8,15,.6);z-index:85;}'
+    + '}'
+    + '.sidebar-backdrop{display:none;}';
+  document.head.appendChild(css);
+  function close() {
+    var s = document.getElementById('sidebar');
+    var b = document.getElementById('sidebar-backdrop');
+    if (s) s.classList.remove('open');
+    if (b) b.classList.remove('show');
+  }
+  function open() {
+    var s = document.getElementById('sidebar');
+    var b = document.getElementById('sidebar-backdrop');
+    if (s) s.classList.add('open');
+    if (b) b.classList.add('show');
+  }
+  function boot() {
+    var top = document.getElementById('topbar');
+    var side = document.getElementById('sidebar');
+    if (!top || !side || !side.querySelector('a')) return false;
+    if (!document.getElementById('sidebar-backdrop')) {
+      var bd = document.createElement('div');
+      bd.id = 'sidebar-backdrop';
+      bd.className = 'sidebar-backdrop';
+      document.body.appendChild(bd);
+      bd.addEventListener('click', close);
+    }
+    if (!document.getElementById('menuBtn')) {
+      var btn = document.createElement('button');
+      btn.id = 'menuBtn';
+      btn.className = 'menu-btn';
+      btn.type = 'button';
+      btn.setAttribute('aria-label', 'القائمة');
+      btn.textContent = '\u2630';
+      top.insertBefore(btn, top.firstChild);
+    }
+    var brand = side.querySelector('.brand');
+    if (brand && !document.getElementById('drawerClose')) {
+      var x = document.createElement('button');
+      x.id = 'drawerClose';
+      x.className = 'drawer-close';
+      x.type = 'button';
+      x.textContent = '\u2715';
+      brand.appendChild(x);
+      x.addEventListener('click', close);
+    }
+    document.getElementById('menuBtn').onclick = open;
+    side.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', close); });
+    return true;
+  }
+  var n = 0;
+  var timer = setInterval(function () { if (boot() || ++n > 50) clearInterval(timer); }, 200);
+})();
+</script>
+
+</body>
+</html>

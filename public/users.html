@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>المستخدمون — النظام المحاسبي</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body data-page-title="إدارة المستخدمين">
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+      <div class="panel">
+        <div class="panel-head">
+          <h3>👥 المستخدمون</h3>
+          <button class="btn btn-teal btn-sm" onclick="openModal('addModal')">➕ مستخدم جديد</button>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>الاسم</th><th class="num">اسم الدخول</th><th>الصلاحية</th><th>سؤال الأمان</th><th class="num">تاريخ الإضافة</th><th class="num">إجراءات</th></tr></thead>
+            <tbody id="users-body"></tbody>
+          </table>
+        </div>
+        <div class="panel-body hint">
+          💡 سؤال الأمان يُفعّل «نسيت كلمة المرور؟» لصاحب الحساب حتى يستعيد دخوله بنفسه عند نسيان كلمة المرور.
+          <div style="margin-top:10px">
+            <button class="btn btn-sm btn-dark" type="button" onclick="openModal('sqlModal')">⚙️ تفعيل إضافة المستخدمين (مرة واحدة)</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-overlay" id="addModal">
+        <div class="modal">
+          <div class="modal-head"><h3>مستخدم جديد</h3><button class="modal-close" data-close-modal>×</button></div>
+          <div class="modal-body">
+            <div class="field"><label>الاسم الكامل *</label><input id="u-name" type="text"></div>
+            <div class="field"><label>اسم الدخول *</label><input id="u-user" type="text" placeholder="بالإنجليزية"></div>
+            <div class="field"><label>كلمة المرور * (8 أحرف على الأقل، حروف وأرقام)</label><input id="u-pass" type="text"></div>
+            <div class="field"><label>سؤال الأمان (اختياري)</label><input id="u-q" type="text" placeholder="مثال: اسم مدرستك الثانوية؟"></div>
+            <div class="field"><label>إجابة سؤال الأمان (اختياري)</label><input id="u-ans" type="text"></div>
+            <div class="field"><label>الصلاحية</label>
+              <select id="u-role"><option value="accountant">محاسب</option><option value="accounts_manager">مسؤول الحسابات</option><option value="admin">مدير النظام</option><option value="viewer">مشاهدة فقط</option></select></div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-gold" onclick="addUser()">حفظ</button>
+            <button class="btn btn-dark" data-close-modal>إلغاء</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-overlay" id="secModal">
+        <div class="modal">
+          <div class="modal-head"><h3 id="sec-title">سؤال الأمان</h3><button class="modal-close" data-close-modal>×</button></div>
+          <div class="modal-body">
+            <input type="hidden" id="sec-id">
+            <div class="field"><label>سؤال الأمان</label><input id="sec-q" type="text"></div>
+            <div class="field"><label>إجابة سؤال الأمان</label><input id="sec-ans" type="text"></div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-gold" onclick="saveSecurity()">حفظ</button>
+            <button class="btn btn-dark" data-close-modal>إلغاء</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-overlay" id="pwModal">
+        <div class="modal">
+          <div class="modal-head"><h3 id="pw-title">كلمة مرور جديدة</h3><button class="modal-close" data-close-modal>×</button></div>
+          <div class="modal-body">
+            <input type="hidden" id="pw-id">
+            <div class="field"><label>كلمة المرور الجديدة (8 أحرف على الأقل، حروف وأرقام)</label><input id="pw-new" type="text"></div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-gold" onclick="savePw()">تغيير</button>
+            <button class="btn btn-dark" data-close-modal>إلغاء</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-overlay" id="sqlModal">
+        <div class="modal" style="max-width:760px">
+          <div class="modal-head"><h3>تفعيل إضافة المستخدمين</h3><button class="modal-close" data-close-modal>×</button></div>
+          <div class="modal-body">
+            <p class="hint" style="margin-bottom:10px;line-height:1.8">
+              1) افتح مشروع Supabase → SQL Editor<br>
+              2) الصق السكربت التالي واضغط Run<br>
+              3) ارجع هنا وأضف المستخدم من زر «مستخدم جديد»
+            </p>
+            <textarea id="sql-box" dir="ltr" style="width:100%;min-height:220px;font-family:ui-monospace,monospace;font-size:12px;background:#0b101a;color:#d7e0ef;border:1px solid var(--line);border-radius:10px;padding:10px"></textarea>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-gold" onclick="copySetupSql()">نسخ السكربت</button>
+            <button class="btn btn-dark" data-close-modal>إغلاق</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <footer class="footer-note">© جميع الحقوق محفوظة — <b>محاسب / محمد احمد</b></footer>
+  </main>
+</div>
+<script src="assets/js/vendor/supabase.js?v=3"></script>
+<script src="assets/js/config.js?v=3"></script>
+<script src="assets/js/supabaseClient.js?v=3"></script>
+<script src="assets/js/common.js?v=3"></script>
+<script src="assets/js/auth.js?v=16"></script>
+<script src="assets/js/db.js?v=16"></script>
+<script src="assets/js/pages/users.js?v=8"></script>
+<script type="module" src="assets/js/firebase-init.js?v=3"></script>
+</body>
+</html>

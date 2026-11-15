@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>دفتر اليومية — النظام المحاسبي</title>
+<link rel="stylesheet" href="assets/css/style.css?v=12">
+</head>
+<body data-page-title="دفتر اليومية">
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="content">
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3>📒 القيود</h3>
+          <div class="toolbar" id="toolbar"></div>
+        </div>
+
+        <div class="filters">
+          <div class="field"><label>من تاريخ</label><input type="date" id="flt-from"></div>
+          <div class="field"><label>إلى تاريخ</label><input type="date" id="flt-to"></div>
+          <div class="field"><label>المنطقة</label><select id="flt-region"><option value="">كل المناطق</option></select></div>
+          <div class="field"><label>الحالة</label>
+            <select id="flt-status"><option value="">الكل</option><option value="posted">مرحل</option><option value="draft">مسودة</option></select></div>
+          <div class="field"><label>بحث (رقم حركة / بيان)</label><input type="text" id="flt-q"></div>
+          <div class="field"><label>نوع القيد</label>
+            <select id="flt-type"><option value="">الكل</option><option value="عادي">عادي</option><option value="تسوية">تسوية</option><option value="افتتاحي">افتتاحي</option><option value="إقفال">إقفال</option></select></div>
+          <button class="btn btn-teal" onclick="loadEntries()">🔍 عرض</button>
+          <a class="btn btn-gold" href="#" onclick="doExport();return false;">📊 تصدير Excel</a>
+        </div>
+
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th class="num">رقم الحركة</th><th class="num">التاريخ</th><th>البيان</th>
+                <th class="num">المنطقة</th><th>الحسابات</th>
+                <th class="num">مدين</th><th class="num">دائن</th><th class="num">الحالة</th><th class="num">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="entries-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="modal-overlay" id="entryModal">
+        <div class="modal wide">
+          <div class="modal-head"><h3 id="entry-modal-title">قيد يومية جديد</h3>
+            <button class="modal-close" data-close-modal>×</button></div>
+          <div class="modal-body">
+            <div class="entry-meta">
+              <div class="field"><label>رقم الحركة * <small style="color:var(--gold)">(بنفسك)</small></label>
+                <input id="e-mv" type="text" placeholder="اكتب رقم الحركة هنا"></div>
+              <div class="field"><label>التاريخ *</label><input id="e-date" type="date"></div>
+              <div class="field"><label>المنطقة *</label><select id="e-region"></select></div>
+              <div class="field"><label>نوع القيد</label>
+                <select id="e-type"><option value="عادي">عادي</option><option value="تسوية">تسوية</option><option value="افتتاحي">افتتاحي</option><option value="إقفال">إقفال</option></select></div>
+              <div class="field" style="grid-column: span 2;"><label>البيان</label>
+                <input id="e-desc" type="text" placeholder="وصف القيد... مثال: مبيعات نقدية / إيجار سبتمبر">
+                <div id="smart-suggest" style="margin:8px 0;display:flex;gap:6px;flex-wrap:wrap"></div>
+              </div>
+            </div>
+            <div class="lines-editor">
+              <table>
+                <thead><tr><th style="width:42%">الحساب</th><th>مدين</th><th>دائن</th><th></th></tr></thead>
+                <tbody id="lines-body"></tbody>
+              </table>
+            </div>
+            <div style="margin-top:10px"><button class="btn btn-sm btn-dark" onclick="addLine()">➕ إضافة سطر</button></div>
+            <div class="entry-totals">
+              <span>إجمالي المدين: <b id="t-debit">0.00</b></span>
+              <span>إجمالي الدائن: <b id="t-credit">0.00</b></span>
+              <span id="diff-box"></span>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-dark" onclick="saveEntry('draft')">💾 حفظ كمسودة</button>
+            <button class="btn btn-green" onclick="saveEntry('posted')">✅ حفظ وترحيل</button>
+            <button class="btn btn-dark" data-close-modal>إلغاء</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-overlay" id="impModal">
+        <div class="modal">
+          <div class="modal-head"><h3>استيراد قيود من إكسيل</h3><button class="modal-close" data-close-modal>×</button></div>
+          <div class="modal-body">
+            <div class="alert warn" style="font-size:12.5px">
+              ملف xlsx بأعمدة: رقم الحركة، التاريخ (YYYY-MM-DD)، مدين، دائن، اسم الحساب، رقم الحساب، البيان، المنطقة (اختياري).
+              كل الصفوف بنفس رقم الحركة تُستورد كقيد واحد متعدد السطور. حساب غير موجود يُنشأ تلقائيًا.
+            </div>
+            <div class="field"><label>اختر الملف (.xlsx)</label><input type="file" id="jimp-file" accept=".xlsx"></div>
+            <div class="field"><label>منطقة القيود المستوردة (عند عدم تحديدها بالملف)</label><select id="jimp-region"></select></div>
+            <div class="field"><label>حالة الاستيراد</label>
+              <select id="jimp-post"><option value="1">مرحلة (إن كانت متوازنة)</option><option value="0">مسودات</option></select></div>
+            <div id="jimp-result"></div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-gold" onclick="doJournalImport()">رفع واستيراد</button>
+            <button class="btn btn-dark" data-close-modal>إغلاق</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-overlay" id="wipeModal">
+        <div class="modal">
+          <div class="modal-head"><h3>🧹 مسح القيود</h3><button class="modal-close" data-close-modal>×</button></div>
+          <div class="modal-body">
+            <div class="alert err" style="font-size:12.5px">⚠️ عملية خطيرة: القيود المحذوفة لا يمكن استرجاعها.</div>
+            <div class="field"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="radio" name="wipe-scope" value="month" checked> حذف قيود شهر محدد</label></div>
+            <div class="field"><input type="month" id="wipe-month"></div>
+            <div class="field"><label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="radio" name="wipe-scope" value="all"> مسح جميع القيود نهائيًا (كل الشهور)</label></div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-red" onclick="doWipe()">🗑️ تنفيذ المسح</button>
+            <button class="btn btn-dark" data-close-modal>إلغاء</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <footer class="footer-note">© جميع الحقوق محفوظة — <b>محاسب / محمد احمد</b></footer>
+  </main>
+</div>
+
+<script src="assets/js/vendor/supabase.js?v=3"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="assets/js/config.js?v=3"></script>
+<script src="assets/js/supabaseClient.js?v=4"></script>
+<script src="assets/js/common.js?v=3"></script>
+<script src="assets/js/auth.js?v=15"></script>
+<script src="assets/js/db.js?v=15"></script>
+<script src="assets/js/smart-accounting.js?v=4"></script>
+<script>
+'use strict';
+
+let ACCOUNTS = [], editingId = null, ENTRIES = [], originalMovementNo = '';
+
+function setMvLocked(locked) {
+  const el = $('#e-mv');
+  if (!el) return;
+  el.readOnly = !!locked;
+  el.style.opacity = locked ? '0.75' : '';
+  el.title = locked ? 'رقم الحركة ثابت عند التعديل ولن يُنشأ قيد جديد' : '';
+}
+
+function today() { return new Date().toISOString().slice(0, 10); }
+
+function accOptions(selected) {
+  return `<option value="">— اختر الحساب —</option>` + ACCOUNTS.map(a =>
+    `<option value="${a.id}" ${Number(selected) === a.id ? 'selected' : ''}>${esc(a.acc_no)} - ${esc(a.name)}</option>`
+  ).join('');
+}
+
+function buildToolbar() {
+  let html = '';
+  if (APP.canWrite()) html += `<button class="btn btn-gold btn-sm" onclick="newEntry()">➕ قيد جديد</button>`;
+  if (APP.canWrite()) html += `<button class="btn btn-dark btn-sm" onclick="openModal('impModal')">📥 استيراد</button>`;
+  if (APP.isAdmin()) html += `<button class="btn btn-red btn-sm" onclick="openModal('wipeModal')">🧹 مسح قيود</button>`;
+  $('#toolbar').innerHTML = html;
+}
+
+function fillRegionSelects() {
+  const opts = APP.regions.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join('');
+  $('#flt-region').innerHTML = '<option value="">كل المناطق</option>' + opts;
+  $('#e-region').innerHTML = opts;
+  $('#jimp-region').innerHTML = opts;
+}
+
+function filters() {
+  return {
+    from: $('#flt-from').value || undefined,
+    to: $('#flt-to').value || undefined,
+    region: $('#flt-region').value || undefined,
+    status: $('#flt-status').value || undefined,
+    type: $('#flt-type').value || undefined,
+    query: $('#flt-q').value.trim() || undefined,
+    limit: 500,
+  };
+}
+
+async function loadEntries() {
+  try {
+    ENTRIES = await DB.journalList(filters());
+    const tb = $('#entries-body');
+    if (!ENTRIES.length) {
+      tb.innerHTML = '<tr><td colspan="9" class="empty-state"><div class="big">📒</div>لا توجد قيود مطابقة</td></tr>';
+      return;
+    }
+    const canWrite = APP.canWrite();
+    tb.innerHTML = ENTRIES.map(e => `
+      <tr>
+        <td class="num">${esc(e.movement_no)}</td>
+        <td class="num">${fmtDate(e.entry_date)}</td>
+        <td>${esc(e.description || '—')}</td>
+        <td class="num"><span class="badge region">${esc(e.region)}</span>
+            ${e.entry_type && e.entry_type !== 'عادي' ? `<span class="badge draft">${esc(e.entry_type)}</span>` : ''}</td>
+        <td><span class="acc-lines">
+          ${e.lines.map(l => `${esc(l.acc_no)} ${esc(l.name)} <b class="${l.debit > 0 ? 'amt-d' : 'amt-c'}">${l.debit > 0 ? fmt(l.debit) + ' مد' : fmt(l.credit) + ' دا'}</b>`).join('<br>')}
+        </span></td>
+        <td class="num" style="color:var(--green)">${fmt(e.total_debit)}</td>
+        <td class="num" style="color:var(--red)">${fmt(e.total_credit)}</td>
+        <td class="num">${e.status === 'posted' ? '<span class="badge posted">مرحل</span>' : '<span class="badge draft">مسودة</span>'}</td>
+        <td class="num">
+          ${canWrite ? `<div class="j-actions">
+            <button class="btn btn-sm btn-dark act-btn" title="تعديل نفس القيد" onclick="editEntry(${e.id})">✏️</button>
+            ${e.status === 'draft' ? `
+              <button class="btn btn-sm btn-green act-btn" title="ترحيل" onclick="postEntry(${e.id})">✔</button>` :
+              `<button class="btn btn-sm btn-dark act-btn" title="إلغاء الترحيل" onclick="unpostEntry(${e.id})">↩️</button>`}
+            <button class="btn btn-sm btn-gold act-btn" title="كرر القيد" onclick="repeatEntry(${e.id})">📋</button>
+            <button class="btn btn-sm btn-red act-btn" title="حذف" onclick="delEntry(${e.id})">🗑️</button>
+          </div>` : '<span class="badge gray">عرض فقط</span>'}
+        </td>
+      </tr>`).join('');
+  } catch (e) { toast(errMsg(e), 'err'); }
+}
+
+function doExport() {
+  const rows = [['رقم الحركة', 'التاريخ', 'البيان', 'المنطقة', 'الحساب', 'مدين', 'دائن', 'الحالة']];
+  ENTRIES.forEach(e => e.lines.forEach(l => rows.push([
+    e.movement_no, e.entry_date, e.description || '', e.region, `${l.acc_no} ${l.name}`,
+    l.debit || '', l.credit || '', e.status === 'posted' ? 'مرحل' : 'مسودة',
+  ])));
+  exportExcel('دفتر اليومية.xlsx', 'القيود', rows);
+}
+
+/* ===== محرر القيد ===== */
+function newEntry() {
+  editingId = null;
+  originalMovementNo = '';
+  setMvLocked(false);
+  $('#entry-modal-title').textContent = 'قيد يومية جديد';
+  $('#e-desc').value = ''; $('#e-mv').value = ''; $('#e-type').value = 'عادي'; $('#e-date').value = today();
+  $('#lines-body').innerHTML = '';
+  addLine(); addLine();
+  suggestFromDesc();
+  openModal('entryModal');
+}
+
+let lineSeq = 0;
+function addLine(accId = '', debit = '', credit = '') {
+  const tr = document.createElement('tr');
+  tr.dataset.seq = ++lineSeq;
+  tr.innerHTML = `
+    <td><select class="ln-acc">${accOptions(Number(accId))}</select></td>
+    <td><input class="ln-debit num" type="number" step="0.01" min="0" value="${debit}"></td>
+    <td><input class="ln-credit num" type="number" step="0.01" min="0" value="${credit}"></td>
+    <td><button class="line-del" onclick="delLine(this)" title="حذف السطر">🗑️</button></td>`;
+  $('#lines-body').appendChild(tr);
+  recalc();
+}
+function delLine(btn) { btn.closest('tr').remove(); recalc(); }
+
+function getLines() {
+  return $$('#lines-body tr').map(tr => ({
+    account_id: $('.ln-acc', tr).value,
+    debit: parseFloat($('.ln-debit', tr).value || 0),
+    credit: parseFloat($('.ln-credit', tr).value || 0),
+  }));
+}
+
+function recalc() {
+  let td = 0, tc = 0;
+  $$('#lines-body tr').forEach(tr => {
+    const d = parseFloat($('.ln-debit', tr).value || 0);
+    const c = parseFloat($('.ln-credit', tr).value || 0);
+    td += d; tc += c;
+    $('.ln-credit', tr).style.borderColor = (d > 0 && c > 0) ? 'var(--red)' : '';
+  });
+  $('#t-debit').textContent = fmt(td);
+  $('#t-credit').textContent = fmt(tc);
+  const diff = Math.round((td - tc) * 100) / 100;
+  $('#diff-box').innerHTML = diff === 0
+    ? '<span class="badge posted">متوازن ✔</span>'
+    : `<span class="badge draft">فرق: ${fmt(Math.abs(diff))}</span>`;
+}
+document.addEventListener('input', e => {
+  if (e.target.closest('#lines-body')) recalc();
+  if (e.target && e.target.id === 'e-desc') suggestFromDesc();
+});
+
+function entryPayload(status) {
+  const typed = $('#e-mv').value.trim();
+  return {
+    movement_no: editingId ? (originalMovementNo || typed) : typed,
+    entry_date: $('#e-date').value, region: $('#e-region').value,
+    description: $('#e-desc').value.trim(), entry_type: $('#e-type').value, status,
+    lines: getLines().filter(l => l.account_id && (l.debit > 0 || l.credit > 0)),
+  };
+}
+
+function validateClient(p) {
+  if (typeof SMART !== 'undefined') {
+    const r = SMART.validate(p, ACCOUNTS);
+    (r.warns || []).forEach(w => toast(w, 'err'));
+    if (!r.ok) return (r.errors && r.errors[0]) || 'القيد مرفوض';
+    return null;
+  }
+  if (!p.entry_date) return 'اختر التاريخ';
+  if (!p.movement_no) return 'أدخل رقم الحركة';
+  if (p.lines.length < 2) return 'القيد يحتاج سطرين على الأقل';
+  for (const l of p.lines) if (l.debit > 0 && l.credit > 0) return 'السطر لا يمكن أن يكون مدينًا ودائنًا معًا';
+  const td = p.lines.reduce((s, l) => s + l.debit, 0);
+  const tc = p.lines.reduce((s, l) => s + l.credit, 0);
+  if (Math.round((td - tc) * 100) / 100 !== 0) return 'القيد غير متوازن';
+  if (td <= 0) return 'إجمالي القيد يجب أن يكون أكبر من صفر';
+  return null;
+}
+
+function suggestFromDesc() {
+  const box = document.getElementById('smart-suggest');
+  if (!box || typeof SMART === 'undefined') return;
+  const list = SMART.suggest($('#e-desc') ? $('#e-desc').value : '', ACCOUNTS);
+  if (!list.length) { box.innerHTML = ''; return; }
+  box.innerHTML = list.map((s, i) =>
+    `<button type="button" class="btn btn-sm btn-dark" onclick="applySmartTemplate(${i})">${esc(s.title)}</button>`
+  ).join(' ');
+  window.__smartSuggest = list;
+}
+
+function applySmartTemplate(i) {
+  const s = (window.__smartSuggest || [])[i];
+  if (!s) return;
+  $('#lines-body').innerHTML = '';
+  s.lines.forEach(l => addLine(l.account_id || '', l.side === 'd' ? '' : '', l.side === 'c' ? '' : ''));
+  toast('تم تعبئة الحسابات من القالب — أدخل المبلغ');
+}
+
+async function saveEntry(status) {
+  const p = entryPayload(status);
+  const err = validateClient(p);
+  if (err) return toast(err, 'err');
+  if (!editingId) {
+    const dup = ENTRIES.find(x => String(x.movement_no) === String(p.movement_no));
+    if (dup) return toast('رقم الحركة موجود بالفعل — هذا يعدّل قيدًا قديمًا لا ينشئ قيدًا جديدًا. اضغط أيقونة التعديل على نفس الصف', 'err');
+  }
+  try {
+    if (editingId) {
+      const cur = ENTRIES.find(x => x.id === editingId);
+      if (cur && cur.status === 'posted') await DB.unpostEntry(editingId);
+      await DB.updateEntry(editingId, p);
+      if (status === 'posted') await DB.postEntry(editingId);
+    } else {
+      await DB.createEntry(p);
+    }
+    closeModal('entryModal');
+    toast(editingId ? 'تم تعديل نفس القيد بدون إنشاء حركة جديدة' : (status === 'posted' ? 'تم حفظ وترحيل القيد' : 'تم حفظ القيد كمسودة'));
+    editingId = null;
+    originalMovementNo = '';
+    loadEntries();
+  } catch (e) { toast(errMsg(e), 'err'); }
+}
+
+async function editEntry(id) {
+  const e = ENTRIES.find(x => x.id === id);
+  if (!e) return toast('القيد غير موجود', 'err');
+  editingId = id;
+  originalMovementNo = e.movement_no;
+  openEntryEditor(e, `تعديل القيد رقم الحركة ${e.movement_no}`, false);
+}
+
+function repeatEntry(id) {
+  const e = ENTRIES.find(x => x.id === id);
+  if (!e) return toast('القيد غير موجود', 'err');
+  editingId = null;
+  originalMovementNo = '';
+  openEntryEditor(e, `قيد جديد متكرر — الأصل: رقم حركة ${e.movement_no}`, true);
+  toast('هذا قيد جديد منسوخ — اكتب رقم حركة مختلفًا عن الأصل');
+}
+function openEntryEditor(e, title, clearMv) {
+  $('#entry-modal-title').textContent = title;
+  $('#e-mv').value = clearMv ? '' : e.movement_no;
+  setMvLocked(!clearMv && !!editingId);
+  $('#e-date').value = clearMv ? today() : e.entry_date;
+  $('#e-region').value = e.region;
+  $('#e-type').value = e.entry_type || 'عادي';
+  $('#e-desc').value = e.description || '';
+  $('#lines-body').innerHTML = '';
+  e.lines.forEach(l => addLine(l.account_id, l.debit || '', l.credit || ''));
+  recalc();
+  suggestFromDesc();
+  openModal('entryModal');
+}
+
+async function postEntry(id) {
+  if (!await confirmDlg('ترحيل هذا القيد؟ سيظهر في الأستاذ العام وميزان المراجعة.')) return;
+  try { await DB.postEntry(id); toast('تم الترحيل ✔'); loadEntries(); }
+  catch (e) { toast(errMsg(e), 'err'); }
+}
+async function unpostEntry(id) {
+  if (!await confirmDlg('إلغاء ترحيل القيد؟')) return;
+  try { await DB.unpostEntry(id); toast('تم إلغاء الترحيل'); loadEntries(); }
+  catch (e) { toast(errMsg(e), 'err'); }
+}
+async function delEntry(id) {
+  if (!await confirmDlg('حذف القيد نهائيًا؟')) return;
+  try { await DB.deleteEntry(id); toast('تم الحذف'); loadEntries(); }
+  catch (e) { toast(errMsg(e), 'err'); }
+}
+
+async function doWipe() {
+  const scope = $('input[name=wipe-scope]:checked').value;
+  const month = $('#wipe-month').value;
+  if (scope === 'month' && !month) return toast('اختر الشهر أولًا', 'err');
+  const label = scope === 'month' ? `كل قيود شهر ${month}` : 'جميع القيود بلا استثناء';
+  if (!await confirmDlg(`تحذير نهائي ⚠️ هتحذف ${label} نهائيًا. متأكد؟`)) return;
+  if (!await confirmDlg('تأكيد أخير: نفّذ المسح الآن؟')) return;
+  try {
+    const n = await DB.bulkDeleteJournal(scope, month);
+    closeModal('wipeModal');
+    toast(`تم مسح ${n} قيد`);
+    loadEntries();
+  } catch (e) { toast(errMsg(e), 'err'); }
+}
+
+async function doJournalImport() {
+  const f = $('#jimp-file').files[0];
+  if (!f) return toast('اختر ملفًا أولًا', 'err');
+  const defaultRegion = $('#jimp-region').value;
+  const post = $('#jimp-post').value === '1';
+  try {
+    const buf = await f.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+    const groups = {};
+    for (const r of rows) {
+      const mv = String(r['رقم الحركة'] ?? r['movement_no'] ?? '').trim();
+      if (!mv) continue;
+      (groups[mv] ||= []).push(r);
+    }
+    let added = 0, newAccounts = 0, drafts = 0; const errors = [];
+    for (const [mv, lines] of Object.entries(groups)) {
+      try {
+        const first = lines[0];
+        const entry_date = String(first['التاريخ'] ?? first['entry_date'] ?? today()).slice(0, 10);
+        const description = String(first['البيان'] ?? first['description'] ?? '');
+        const region = String(first['المنطقة'] ?? '').trim() || defaultRegion;
+        const entryLines = [];
+        for (const r of lines) {
+          const acc_no = String(r['رقم الحساب'] ?? r['acc_no'] ?? '').trim();
+          const name = String(r['اسم الحساب'] ?? r['name'] ?? '').trim();
+          const debit = parseFloat(r['مدين'] ?? r['debit'] ?? 0) || 0;
+          const credit = parseFloat(r['دائن'] ?? r['credit'] ?? 0) || 0;
+          if (!acc_no) continue;
+          let acc = ACCOUNTS.find(a => a.acc_no === acc_no);
+          if (!acc) {
+            acc = await DB.createAccount({ acc_no, name: name || acc_no, type: '', opening_balance: 0, budget: 0 });
+            ACCOUNTS.push(acc); newAccounts++;
+          }
+          entryLines.push({ account_id: acc.id, debit, credit });
+        }
+        const check = typeof SMART !== 'undefined'
+          ? SMART.validate({ movement_no: mv, entry_date, description, lines: entryLines }, ACCOUNTS)
+          : { ok: Math.abs(entryLines.reduce((s, l) => s + l.debit, 0) - entryLines.reduce((s, l) => s + l.credit, 0)) < 0.01, errors: [], warns: [] };
+        const td = entryLines.reduce((s, l) => s + l.debit, 0);
+        const tc = entryLines.reduce((s, l) => s + l.credit, 0);
+        const balanced = Math.abs(td - tc) < 0.01;
+        if (!balanced || !check.ok) drafts++;
+        await DB.createEntry({ movement_no: mv, entry_date, description, region, entry_type: 'عادي',
+          status: (post && balanced && check.ok) ? 'posted' : 'draft', lines: entryLines });
+        added++;
+      } catch (e) { errors.push(`${mv}: ${errMsg(e)}`); }
+    }
+    let html = `<div class="alert ok">✔ تم استيراد <b>${added}</b> قيد` +
+      (newAccounts ? ` وإنشاء <b>${newAccounts}</b> حساب جديد تلقائيًا` : '') +
+      (drafts ? `<br>⚠️ <b>${drafts}</b> قيد غير متوازن أو مرفوض محاسبيًا أُضيف كمسودة` : '') + `</div>`;
+    if (errors.length) html += `<div class="alert warn" style="max-height:180px;overflow:auto">${errors.map(esc).join('<br>')}</div>`;
+    $('#jimp-result').innerHTML = html;
+    toast('تم الاستيراد بنجاح');
+    loadEntries();
+  } catch (e) {
+    $('#jimp-result').innerHTML = `<div class="alert err">${esc(errMsg(e))}</div>`;
+  }
+}
+
+APP.requireAuth({ activePath: 'journal.html' }).then(async () => {
+  buildToolbar();
+  fillRegionSelects();
+  $('#wipe-month').value = today().slice(0, 7);
+  try {
+    ACCOUNTS = await DB.accounts();
+    await loadEntries();
+  } catch (e) { toast(errMsg(e), 'err'); }
+});
+
+</script>
+<script type="module" src="assets/js/firebase-init.js?v=3"></script>
+
+<script>
+(function () {
+  var css = document.createElement('style');
+  css.textContent = '@media (max-width:900px){'
+    + '.menu-btn{display:inline-flex!important;align-items:center;justify-content:center;width:44px;height:44px;min-width:44px;border:0;border-radius:12px;background:linear-gradient(145deg,#e8c56a,#b9862b);color:#161006;font-size:22px;font-weight:800;}'
+    + '.layout{flex-direction:row!important;}'
+    + '.sidebar{display:none!important;position:fixed!important;top:0;right:0;left:auto;width:min(300px,88vw)!important;height:100vh!important;z-index:90;flex-direction:column!important;flex-wrap:nowrap!important;overflow:auto;background:#12182a;}'
+    + '.sidebar.open{display:flex!important;}'
+    + '.sidebar .nav{flex-direction:column!important;flex-wrap:nowrap!important;width:100%;}'
+    + '.drawer-close{display:inline-flex!important;margin-right:auto;width:36px;height:36px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:transparent;color:#fff;font-size:18px;}'
+    + '.sidebar-backdrop.show{display:block;position:fixed;inset:0;background:rgba(5,8,15,.6);z-index:85;}'
+    + '}'
+    + '.sidebar-backdrop{display:none;}';
+  document.head.appendChild(css);
+  function close() {
+    var s = document.getElementById('sidebar');
+    var b = document.getElementById('sidebar-backdrop');
+    if (s) s.classList.remove('open');
+    if (b) b.classList.remove('show');
+  }
+  function open() {
+    var s = document.getElementById('sidebar');
+    var b = document.getElementById('sidebar-backdrop');
+    if (s) s.classList.add('open');
+    if (b) b.classList.add('show');
+  }
+  function boot() {
+    var top = document.getElementById('topbar');
+    var side = document.getElementById('sidebar');
+    if (!top || !side || !side.querySelector('a')) return false;
+    if (!document.getElementById('sidebar-backdrop')) {
+      var bd = document.createElement('div');
+      bd.id = 'sidebar-backdrop';
+      bd.className = 'sidebar-backdrop';
+      document.body.appendChild(bd);
+      bd.addEventListener('click', close);
+    }
+    if (!document.getElementById('menuBtn')) {
+      var btn = document.createElement('button');
+      btn.id = 'menuBtn';
+      btn.className = 'menu-btn';
+      btn.type = 'button';
+      btn.setAttribute('aria-label', 'القائمة');
+      btn.textContent = '\u2630';
+      top.insertBefore(btn, top.firstChild);
+    }
+    var brand = side.querySelector('.brand');
+    if (brand && !document.getElementById('drawerClose')) {
+      var x = document.createElement('button');
+      x.id = 'drawerClose';
+      x.className = 'drawer-close';
+      x.type = 'button';
+      x.textContent = '\u2715';
+      brand.appendChild(x);
+      x.addEventListener('click', close);
+    }
+    document.getElementById('menuBtn').onclick = open;
+    side.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', close); });
+    return true;
+  }
+  var n = 0;
+  var timer = setInterval(function () { if (boot() || ++n > 50) clearInterval(timer); }, 200);
+})();
+</script>
+
+</body>
+</html>

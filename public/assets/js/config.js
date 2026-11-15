@@ -1,0 +1,3 @@
+// بيانات مشروع Supabase
+window.SUPABASE_URL = "https://ndfixjrzfhyxugkjlill.supabase.co";
+window.SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5kZml4anJ6Zmh5eHVna2psaWxsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk0MjMxMjMsImV4cCI6MjEwNDk5OTEyM30.BazpnWu4wM9ts6wtnKYCu-Frx0nMToVi9krbMCey4Sw";
