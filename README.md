@@ -18,6 +18,17 @@ instead of inside the `hr_store_v1` settings blob. Create it by running
 - Salary records whose source salary voucher was deleted or un-posted are removed from the HR payroll history automatically.
 - A salary record appears in the printed / exported employee statement only 24 hours after its `created_at`.
 
+### Expense sheets (كشوف المصروفات)
+The Expenses page has expense sheets: one document with many lines, like an invoice, mirroring the "Financial accounts" Excel layout
+(Date | Statement | Income | Expenses | Balance after transaction + Total Income / Total Expenses / Current Balance).
+- "جلب Excel" turns a whole file into one sheet, opened for review before saving. It finds the header row, ignores summary rows and stray rows far below the table,
+  fixes dates Excel stored with day and month swapped, and checks totals and every running balance against the file.
+- Lines can be added, inserted, edited, deleted and sorted, each with an optional expense account. Drafts are auto-saved.
+- Posting creates one balanced journal entry (expenses Dr / cash net / funding Cr). Un-posting deletes that entry so the sheet can be edited again.
+- Print view, plus Excel export in the same design (colours, fonts, ج.م format, live formulas, red negative balances, fits one page width),
+  using the vendored ExcelJS 4.4.0 (`public/assets/js/vendor/exceljs.min.js`, MIT), loaded only on export.
+- Batches imported row-by-row by the old importer can be deleted in one click (drafts only; a backup is kept in the deleted log).
+
 ### Form drafts (auto-save)
 Every data-entry form and modal auto-saves to `localStorage` through one engine:
 `public/assets/js/form-draft.js` (`Drafts.register({...})` → `.open()` after the form is filled, `.done()` after a successful save).

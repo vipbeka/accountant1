@@ -45,6 +45,8 @@ function expParseAmount(v) {
   if (v == null) return NaN;
   let s = expDigits(v).trim();
   if (!s) return NaN;
+  // تاريخ مكتوب نصاً (15/10/2026) ليس مبلغاً — كان يُقرأ 15102026
+  if (/^\d{1,4}[\/\-]\d{1,2}[\/\-]\d{1,4}$/.test(s) || /^\d{1,2}\.\d{1,2}\.\d{4}$/.test(s)) return NaN;
   let neg = false;
   if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
   s = s.replace(/٫/g, '.').replace(/[٬،]/g, ','); // ٫ عشري، ٬ و، آلاف
@@ -133,8 +135,11 @@ function expDetectHeader(all) {
   let best = -1, bestScore = 0;
   const limit = Math.min(all.length, 20);
   for (let r = 0; r < limit; r++) {
-    const row = (all[r] || []).map(x => (x instanceof Date ? '' : String(x == null ? '' : x)));
+    const cells = all[r] || [];
+    const row = cells.map(x => (x instanceof Date ? '' : String(x == null ? '' : x)));
     if (!row.some(x => x.trim())) continue;
+    // صف العناوين نصي؛ صف فيه أرقام (مثل Total Income 35,900) ليس صف عناوين
+    if (cells.some(x => typeof x === 'number' || x instanceof Date)) continue;
     let score = 0;
     const used = new Set();
     ['amount', 'date', 'description', 'type', 'party', 'account', 'cash'].forEach(f => {
