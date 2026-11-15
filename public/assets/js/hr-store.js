@@ -62,6 +62,34 @@ function hrEosPreview(emp, endDate, reason) {
   };
 }
 
+/* قاعدة الـ 24 ساعة: سجل الراتب لا يظهر في كشف الطباعة إلا بعد مرور يوم كامل
+   على إنشائه. المقارنة بلحظات زمنية مطلقة (ميلي ثانية منذ epoch بتوقيت UTC)
+   فلا تتأثر بالمنطقة الزمنية للجهاز أو التوقيت الصيفي. */
+const HR_PRINT_DELAY_MS = 24 * 60 * 60 * 1000;
+
+function hrParseTs(ts) {
+  if (ts === null || ts === undefined || ts === '') return NaN;
+  if (typeof ts === 'number') return ts;
+  let s = String(ts).trim();
+  // Postgres: "2026-11-12 15:11:14.096437+00" -> ISO صالح لكل المتصفحات
+  s = s.replace(' ', 'T').replace(/(\.\d{3})\d+/, '$1');
+  if (s.includes('T')) s = s.replace(/(T[\d:.]+[+-]\d{2})$/, '$1:00');
+  // تاريخ/وقت بلا منطقة زمنية يُفسَّر UTC (وليس توقيت الجهاز)
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s)) s += 'Z';
+  return Date.parse(s);
+}
+
+/* لحظة السماح بالطباعة. السجلات القديمة بلا أي طابع زمني (أُنشئت قبل هذه القاعدة)
+   تعتبر قديمة ومتاحة فوراً. */
+function hrPrintableAt(p) {
+  const t = hrParseTs(p && (p.created_at || p.posted_at));
+  return Number.isFinite(t) ? t + HR_PRINT_DELAY_MS : 0;
+}
+
+function hrIsPrintable(p, now) {
+  return (now === undefined ? Date.now() : now) >= hrPrintableAt(p);
+}
+
 const HR = {
   cache: null,
 
@@ -160,7 +188,8 @@ const HR = {
     if (!e.name || !String(e.name).trim()) throw new Error('اسم الموظف مطلوب');
     if (!e.hire_date) throw new Error('تاريخ التعيين مطلوب');
     await this.hydrate();
-    if (e.cv_data && e.cv_data.length > 1100000) throw new Error('ملف السيرة أكبر من المسموح (حوالي 700 ك.ب)');
+    // لا حد لحجم السيرة: الملف نفسه في Supabase Storage، وهنا مرجع صغير فقط (cv_path).
+    let replacedPath = '';
     if (!e.id) {
       e.id = this.uid();
       e.code = this.nextNo('HR');
@@ -170,9 +199,15 @@ const HR = {
       const i = this.cache.employees.findIndex(x => x.id === e.id);
       if (i < 0) throw new Error('الموظف غير موجود');
       const prev = this.cache.employees[i];
-      if (!e.cv_data && prev.cv_data) {
+      if (e.cv_path) {
+        // سيرة جديدة مرفوعة: احذف القديمة (من التخزين أو المضمّنة) بعد نجاح الحفظ
+        if (prev.cv_path && prev.cv_path !== e.cv_path) replacedPath = prev.cv_path;
+        e.cv_data = '';
+      } else if (!e.cv_data) {
         e.cv_name = prev.cv_name;
         e.cv_type = prev.cv_type;
+        e.cv_size = prev.cv_size;
+        e.cv_path = prev.cv_path;
         e.cv_data = prev.cv_data;
       }
       this.cache.employees[i] = Object.assign({}, prev, e);
@@ -188,6 +223,7 @@ const HR = {
     e.tax_pct = Number(e.tax_pct || 0);
     e.annual_leave_days = Number(e.annual_leave_days || 21);
     await this.persist();
+    if (replacedPath && typeof CV !== 'undefined') await CV.remove(replacedPath);
     try {
       if (window.EXT) {
         await EXT.hydrate();
@@ -213,10 +249,14 @@ const HR = {
   async clearCv(id) {
     const e = this.employee(id);
     if (!e) return;
+    const path = e.cv_path;
     e.cv_name = '';
     e.cv_type = '';
     e.cv_data = '';
+    e.cv_path = '';
+    e.cv_size = 0;
     await this.persist();
+    if (path && typeof CV !== 'undefined') await CV.remove(path);
   },
 
   async deleteEmployee(id) {
@@ -236,6 +276,7 @@ const HR = {
     if (emp.party_id && window.EXT) {
       try { await EXT.deleteParty(emp.party_id); } catch (_) { /* الطرف يبقى إن ارتبط بسند */ }
     }
+    if (emp.cv_path && typeof CV !== 'undefined') await CV.remove(emp.cv_path);
   },
 
   leaveDaysUsed(empId, year, kind) {
@@ -403,13 +444,35 @@ const HR = {
     };
   },
 
-  async syncSalaryVouchers(vouchers, parties) {
+  /* مزامنة سندات صرف الرواتب مع سجل الرواتب في الموارد البشرية — في الاتجاهين.
+     سابقاً كانت تُضيف فقط، فإذا حُذف السند (أو أُلغي ترحيله) يبقى الراتب «شبحاً»
+     في كشف الموظف ويظهر في الطباعة. الآن أي نسخة مصدرها سند لم يعد موجوداً
+     أو لم يعد مرحّلاً تُحذف فوراً. opts.fresh يعيد قراءة hr_store_v1 من القاعدة
+     قبل التعديل حتى لا تُكتب نسخة قديمة فوق تغييرات صفحة أخرى. */
+  async syncSalaryVouchers(vouchers, parties, opts) {
+    if (!Array.isArray(vouchers)) return false; // لا تحذف شيئاً إن تعذر تحميل السندات
+    if (opts && opts.fresh) this.cache = null;
     await this.hydrate();
-    const salaryVouchers = (vouchers || []).filter(v => v && v.kind === 'salary' && v.status === 'posted');
+    const posted = vouchers.filter(v => v && v.kind === 'salary' && v.status === 'posted');
+    const postedById = new Map(posted.map(v => [String(v.id), v]));
     const partyList = parties || [];
     let changed = false;
-    for (const v of salaryVouchers) {
-      if (this.cache.payrolls.some(p => p.source_voucher_id === v.id || p.no === v.no)) continue;
+
+    // 1) احذف الرواتب التي حُذف سندها أو أُلغي ترحيله
+    const before = this.cache.payrolls.length;
+    this.cache.payrolls = this.cache.payrolls.filter(p => {
+      if (p.source !== 'voucher' || !p.source_voucher_id) return true;
+      return postedById.has(String(p.source_voucher_id));
+    });
+    if (this.cache.payrolls.length !== before) changed = true;
+
+    // 2) أضف السندات المرحّلة الجديدة، وأكمل created_at للسجلات القديمة
+    for (const v of posted) {
+      const existing = this.cache.payrolls.find(p => (p.source === 'voucher' && String(p.source_voucher_id) === String(v.id)) || p.no === v.no);
+      if (existing) {
+        if (!existing.created_at && v.created_at) { existing.created_at = v.created_at; changed = true; }
+        continue;
+      }
       const party = partyList.find(p => p.id === v.party_id) || null;
       let emp = this.cache.employees.find(e => e.party_id && e.party_id === v.party_id);
       if (!emp && party) emp = this.cache.employees.find(e => String(e.name || '').trim().toLowerCase() === String(party.name || '').trim().toLowerCase());
@@ -417,8 +480,10 @@ const HR = {
       const amount = hrRound(v.amount);
       const month = String(v.date || '').slice(0, 7);
       if (!/^\d{4}-\d{2}$/.test(month)) continue;
+      const nowIso = new Date().toISOString();
       this.cache.payrolls.push({
-        id: this.uid(), no: v.no, month, status: 'posted', posted_at: new Date().toISOString(),
+        id: this.uid(), no: v.no, month, status: 'posted', posted_at: nowIso,
+        created_at: v.created_at || nowIso,
         source_voucher_id: v.id, source_voucher_no: v.no, source: 'voucher',
         lines: [{ employee_id: emp.id, name: emp.name, code: emp.code,
           basic: amount, allowances: 0, gross: amount, days: 0, absenceDeduction: 0,
@@ -430,6 +495,11 @@ const HR = {
     if (changed) await this.persist();
     return changed;
   },
+
+  /* ---- قاعدة الـ 24 ساعة لطباعة كشف الراتب ---- */
+  printableAt(p) { return hrPrintableAt(p); },
+  isPrintable(p, now) { return hrIsPrintable(p, now); },
+
 };
 
-if (typeof module !== 'undefined') module.exports = { hrEosPreview, hrDaysInclusive, hrDatesInMonth, hrRound, hrMonthLast, HR };
+if (typeof module !== 'undefined') module.exports = { hrEosPreview, hrDaysInclusive, hrDatesInMonth, hrRound, hrMonthLast, hrParseTs, hrPrintableAt, hrIsPrintable, HR_PRINT_DELAY_MS, HR };

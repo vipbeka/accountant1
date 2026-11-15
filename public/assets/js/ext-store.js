@@ -118,6 +118,7 @@ const EXT = {
       amount: Number(r.amount || 0), description: r.description || '',
       cash_account_id: r.cash_account_id || '', offset_account_id: r.offset_account_id || '',
       status: r.status || 'draft', journal_mv: r.journal_mv || '',
+      created_at: r.created_at || '',
     };
   },
 
@@ -188,6 +189,7 @@ const EXT = {
       cash_account_id: v.cash_account_id ? Number(v.cash_account_id) : null,
       offset_account_id: v.offset_account_id ? Number(v.offset_account_id) : null,
       status: v.status || 'draft', journal_mv: v.journal_mv || null,
+      ...(v.created_at ? { created_at: v.created_at } : {}),
       updated_at: new Date().toISOString(),
       created_by: (window.APP && APP.user && APP.user.id) || null,
     };
@@ -348,6 +350,7 @@ const EXT = {
       const pref = v.kind === 'receipt' ? 'RCP' : v.kind === 'salary' ? 'SAL' : 'PAY';
       v.no = v.no || this.nextNo(pref);
       v.status = v.status || 'draft';
+      v.created_at = new Date().toISOString(); // يُستخدم لقاعدة الـ 24 ساعة في كشف الراتب
       this.cache.vouchers.push(v);
     } else {
       const i = this.cache.vouchers.findIndex(x => x.id === v.id);

@@ -70,19 +70,38 @@ function renderJobs() {
       </div>
       <div class="modal-foot">
         <button class="btn btn-gold" onclick="saveJobForm()">حفظ</button>
+        <button class="btn btn-dark" type="button" onclick="resetJobForm()">مسح النموذج</button>
         <button class="btn btn-dark" data-close-modal>إلغاء</button>
       </div>
     </div></div>`;
 }
 
-function editJob(id) {
-  hrEditing.job = id || null;
-  const j = id ? HR.job(id) : { title: '', department: '', basic_salary: 0, description: '' };
+const JOB_FIELDS = { title: 'j-title', department: 'j-dept', basic_salary: 'j-basic', description: 'j-desc' };
+function fillJobFields(j) {
+  j = j || { title: '', department: '', basic_salary: 0, description: '' };
   $('#j-title').value = j.title || '';
   $('#j-dept').value = j.department || '';
   $('#j-basic').value = j.basic_salary || 0;
   $('#j-desc').value = j.description || '';
+}
+function editJob(id) {
+  hrEditing.job = id || null;
+  hrEditing.jobDraftKey = 'hr.job.' + (id || 'new');
+  fillJobFields(id ? HR.job(id) : null);
+  const draft = FormDraft.load(hrEditing.jobDraftKey);
+  if (draft) Object.keys(JOB_FIELDS).forEach(k => { if (typeof draft.data[k] === 'string') $('#' + JOB_FIELDS[k]).value = draft.data[k]; });
+  FormDraft.banner($('#jobModal .modal-body'), draft, resetJobForm);
+  FormDraft.watch($('#jobModal'), {
+    key: () => hrEditing.jobDraftKey || null,
+    collect: () => { const d = {}; Object.keys(JOB_FIELDS).forEach(k => { d[k] = $('#' + JOB_FIELDS[k]).value; }); return d; },
+  });
   openModal('jobModal');
+}
+function resetJobForm() {
+  FormDraft.clear(hrEditing.jobDraftKey);
+  fillJobFields(hrEditing.job ? HR.job(hrEditing.job) : null);
+  FormDraft.banner($('#jobModal .modal-body'), null);
+  toast('تم مسح النموذج');
 }
 async function saveJobForm() {
   try {
@@ -93,6 +112,8 @@ async function saveJobForm() {
       basic_salary: $('#j-basic').value,
       description: $('#j-desc').value,
     });
+    FormDraft.clear(hrEditing.jobDraftKey);
+    hrEditing.jobDraftKey = null;
     closeModal('jobModal');
     toast('تم حفظ الوظيفة');
     renderJobs();
@@ -107,7 +128,7 @@ async function removeJob(id) {
 function renderEmployees() {
   const rows = HR.cache.employees.map(e => {
     const job = HR.job(e.job_id);
-    const cv = e.cv_data ? `<button class="btn btn-sm btn-teal" onclick="downloadCv('${e.id}')">تنزيل السيرة</button>` : '—';
+    const cv = CV.hasCv(e) ? `<button class="btn btn-sm btn-teal" onclick="downloadCv('${e.id}')">تنزيل السيرة</button>` : '—';
     return `<tr>
       <td class="num">${esc(e.code)}</td>
       <td>${esc(e.name)}</td>
@@ -145,12 +166,18 @@ function renderEmployees() {
           <div class="field"><label>تأمينات الموظف %</label><input id="e-insp" type="number" min="0" step="0.01" value="11"></div>
           <div class="field"><label>ضريبة %</label><input id="e-taxp" type="number" min="0" step="0.01" value="0"></div>
           <div class="field"><label>رصيد إجازة سنوية (يوم)</label><input id="e-leave" type="number" min="0" step="1" value="21"></div>
-          <div class="field"><label>السيرة الذاتية (PDF أو صورة، حتى 700 ك.ب)</label><input id="e-cv" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,application/pdf"></div>
+          <div class="field"><label>السيرة الذاتية (PDF — بدون حد للحجم)</label><input id="e-cv" type="file" accept=".pdf,application/pdf">
+            <small id="e-cv-current" class="hint" style="display:block;margin-top:4px"></small></div>
+        </div>
+        <div id="e-cv-progress" style="display:none;margin-top:12px">
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span id="e-cv-progress-label">جارٍ رفع السيرة…</span><span id="e-cv-progress-pct" class="num">0%</span></div>
+          <div style="height:10px;border-radius:6px;background:rgba(127,127,127,.25);overflow:hidden"><div id="e-cv-progress-bar" style="height:100%;width:0;background:linear-gradient(90deg,#b9862b,#e8c56a);transition:width .15s"></div></div>
         </div>
       </div>
       <div class="modal-foot">
-        <button class="btn btn-gold" onclick="saveEmployeeForm()">حفظ</button>
+        <button class="btn btn-gold" id="e-save" onclick="saveEmployeeForm()">حفظ</button>
         <button class="btn btn-dark" id="e-clear-cv" style="display:none" onclick="clearEmployeeCv()">حذف السيرة</button>
+        <button class="btn btn-dark" type="button" onclick="resetEmployeeForm()">مسح النموذج</button>
         <button class="btn btn-dark" data-close-modal>إلغاء</button>
       </div>
     </div></div>`;
@@ -166,10 +193,14 @@ async function removeEmployee(id) {
     renderEmployees();
   } catch (e) { toast(errMsg(e), 'err'); }
 }
-function editEmployee(id) {
-  hrEditing.emp = id || null;
-  hrEditing.cv = null;
-  const e = id ? HR.employee(id) : null;
+/* ---------- مسودة نموذج الموظف ---------- */
+const EMP_FIELDS = { name: 'e-name', national_id: 'e-nid', phone: 'e-phone', job_id: 'e-job', hire_date: 'e-hire',
+  basic_salary: 'e-basic', allowances: 'e-allow', insurable_wage: 'e-insw', insurance_pct: 'e-insp',
+  tax_pct: 'e-taxp', annual_leave_days: 'e-leave' };
+
+function empDraftKey() { return hrEditing.empDraftKey || null; }
+
+function fillEmployeeFields(e) {
   $('#e-job').innerHTML = hrJobOptions(e && e.job_id);
   $('#e-name').value = e ? e.name : '';
   $('#e-nid').value = e ? e.national_id || '' : '';
@@ -182,24 +213,103 @@ function editEmployee(id) {
   $('#e-taxp').value = e ? e.tax_pct : 0;
   $('#e-leave').value = e ? e.annual_leave_days : 21;
   $('#e-cv').value = '';
-  $('#e-clear-cv').style.display = e && e.cv_data ? '' : 'none';
+}
+
+function collectEmployeeDraft() {
+  const d = {};
+  Object.keys(EMP_FIELDS).forEach(k => { d[k] = $('#' + EMP_FIELDS[k]).value; });
+  // الملف نفسه لا يُخزَّن أبداً (قد يكون مئات الميجابايت) — اسمه فقط للتذكير بإعادة اختياره
+  const f = $('#e-cv').files && $('#e-cv').files[0];
+  if (f) d.__file = f.name;
+  else if (hrEditing.empDraftFile) d.__file = hrEditing.empDraftFile;
+  return d;
+}
+
+function applyEmployeeDraft(d) {
+  Object.keys(EMP_FIELDS).forEach(k => {
+    if (typeof d[k] !== 'string') return;
+    const el = $('#' + EMP_FIELDS[k]);
+    if (el.tagName === 'SELECT' && d[k] && !$$('option', el).some(o => o.value === d[k])) return; // وظيفة حُذفت
+    el.value = d[k];
+  });
+}
+
+function showEmployeeCvInfo(e) {
+  const box = $('#e-cv-current');
+  if (!box) return;
+  box.textContent = CV.hasCv(e)
+    ? 'المرفق الحالي: ' + (e.cv_name || 'سيرة ذاتية') + (e.cv_size ? ' (' + cvFmtSize(e.cv_size) + ')' : '') + ' — اختر ملفاً جديداً لاستبداله'
+    : '';
+}
+
+function editEmployee(id) {
+  hrEditing.emp = id || null;
+  hrEditing.empDraftFile = '';
+  hrEditing.empDraftKey = 'hr.employee.' + (id || 'new');
+  const e = id ? HR.employee(id) : null;
+  fillEmployeeFields(e);
+  $('#e-clear-cv').style.display = e && CV.hasCv(e) ? '' : 'none';
+  showEmployeeCvInfo(e);
+  setCvProgress(null);
+  const draft = FormDraft.load(hrEditing.empDraftKey);
+  if (draft) {
+    applyEmployeeDraft(draft.data);
+    hrEditing.empDraftFile = draft.data.__file || '';
+  }
+  FormDraft.banner($('#empModal .modal-body'), draft, resetEmployeeForm);
+  FormDraft.watch($('#empModal'), { key: empDraftKey, collect: collectEmployeeDraft });
   openModal('empModal');
 }
 
-function readCvFile(file) {
+/* زر «مسح النموذج»: يحذف المسودة ويعيد الحقول لقيم السجل المحفوظ (أو فارغة لموظف جديد) */
+function resetEmployeeForm() {
+  FormDraft.clear(hrEditing.empDraftKey);
+  hrEditing.empDraftFile = '';
+  const e = hrEditing.emp ? HR.employee(hrEditing.emp) : null;
+  fillEmployeeFields(e);
+  FormDraft.banner($('#empModal .modal-body'), null);
+  toast('تم مسح النموذج');
+}
+
+function setCvProgress(loaded, total, label) {
+  const wrap = $('#e-cv-progress');
+  if (!wrap) return;
+  if (loaded === null || loaded === undefined) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  const pct = total ? Math.floor((loaded / total) * 100) : 0;
+  $('#e-cv-progress-bar').style.width = pct + '%';
+  $('#e-cv-progress-pct').textContent = pct + '%';
+  $('#e-cv-progress-label').textContent = label || ('جارٍ رفع السيرة… ' + cvFmtSize(loaded) + ' من ' + cvFmtSize(total));
+}
+
+function setEmployeeFormBusy(busy) {
+  ['#e-save', '#e-clear-cv', '#e-cv'].forEach(sel => { const el = $(sel); if (el) el.disabled = !!busy; });
+  const save = $('#e-save');
+  if (save) save.textContent = busy ? 'جارٍ الحفظ…' : 'حفظ';
+  hrEditing.empBusy = !!busy;
+}
+
+/* احتياط قبل تشغيل ترحيل حاوية التخزين: الملفات الصغيرة فقط تُضمّن كالسابق */
+const CV_LEGACY_INLINE_MAX = 700 * 1024;
+function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
-    if (!file) return resolve(null);
-    if (file.size > 700 * 1024) return reject(new Error('حجم السيرة أكبر من 700 ك.ب'));
     const reader = new FileReader();
-    reader.onload = () => resolve({ name: file.name, type: file.type || 'application/octet-stream', data: String(reader.result || '') });
+    reader.onload = () => resolve(String(reader.result || ''));
     reader.onerror = () => reject(new Error('تعذر قراءة الملف'));
     reader.readAsDataURL(file);
   });
 }
 
 async function saveEmployeeForm() {
+  if (hrEditing.empBusy) return;
+  const file = $('#e-cv').files && $('#e-cv').files[0];
+  const draftKey = hrEditing.empDraftKey;
+  let uploaded = null;
+  setEmployeeFormBusy(true);
   try {
-    const cv = await readCvFile($('#e-cv').files && $('#e-cv').files[0]);
+    // تحقق من الحقول الأساسية قبل رفع ملف قد يكون ضخماً
+    if (!$('#e-name').value.trim()) throw new Error('اسم الموظف مطلوب');
+    if (!$('#e-hire').value) throw new Error('تاريخ التعيين مطلوب');
     const payload = {
       id: hrEditing.emp || undefined,
       name: $('#e-name').value,
@@ -214,20 +324,37 @@ async function saveEmployeeForm() {
       tax_pct: $('#e-taxp').value,
       annual_leave_days: $('#e-leave').value,
     };
-    if (cv) {
-      payload.cv_name = cv.name;
-      payload.cv_type = cv.type;
-      payload.cv_data = cv.data;
+    if (file) {
+      await CV.validatePdf(file);
+      try {
+        uploaded = await CV.upload(file, (l, t) => setCvProgress(l, t));
+        Object.assign(payload, { cv_path: uploaded.path, cv_name: uploaded.name, cv_type: uploaded.type, cv_size: uploaded.size, cv_data: '' });
+      } catch (err) {
+        if (err.code !== 'BUCKET_MISSING' || file.size > CV_LEGACY_INLINE_MAX) throw err;
+        Object.assign(payload, { cv_path: '', cv_name: file.name, cv_type: 'application/pdf', cv_size: file.size, cv_data: await readFileAsDataUrl(file) });
+        toast('التخزين السحابي غير مهيأ — حُفظت السيرة داخل ملف الموظف مؤقتاً', 'err');
+      }
+      setCvProgress(1, 1, 'اكتمل رفع السيرة — جارٍ حفظ ملف الموظف…');
     }
     await HR.saveEmployee(payload);
+    uploaded = null; // صار مرتبطاً بالموظف
+    FormDraft.clear(draftKey);
+    hrEditing.empDraftKey = null; // لا تُعِد كتابة مسودة بعد الحفظ
     closeModal('empModal');
     toast('تم حفظ ملف الموظف');
     renderEmployees();
-  } catch (e) { toast(errMsg(e), 'err'); }
+  } catch (e) {
+    toast(errMsg(e), 'err');
+    setCvProgress(null);
+  } finally {
+    if (uploaded) await CV.remove(uploaded.path); // لا تترك ملفاً يتيماً إن فشل الحفظ
+    setEmployeeFormBusy(false);
+  }
 }
 
 async function clearEmployeeCv() {
   if (!hrEditing.emp) return;
+  if (!await confirmDlg('حذف السيرة الذاتية لهذا الموظف نهائياً؟')) return;
   try {
     await HR.clearCv(hrEditing.emp);
     toast('حُذفت السيرة');
@@ -236,15 +363,9 @@ async function clearEmployeeCv() {
   } catch (e) { toast(errMsg(e), 'err'); }
 }
 
-function downloadCv(id) {
-  const e = HR.employee(id);
-  if (!e || !e.cv_data) return;
-  const a = document.createElement('a');
-  a.href = e.cv_data;
-  a.download = e.cv_name || (e.name + '-cv');
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+async function downloadCv(id) {
+  try { await CV.download(HR.employee(id)); }
+  catch (e) { toast('تعذر تنزيل السيرة: ' + errMsg(e), 'err'); }
 }
 
 function renderAttendance() {
@@ -447,7 +568,7 @@ async function postAdvance(id) {
 function hrExcelRows(file){ return new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=e=>{ try{ const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true}); const ws=wb.Sheets[wb.SheetNames[0]]; resolve(XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false})); }catch(x){reject(x);} }; r.onerror=reject; r.readAsArrayBuffer(file); }); }
 function hrHeaderIndex(headers,names){return headers.findIndex(h=>names.some(n=>String(h||'').trim().toLowerCase().includes(String(n).toLowerCase())));}
 function hrCell(row,headers,names,fallback=''){const i=hrHeaderIndex(headers,names);return i>=0?String(row[i]??'').trim():fallback;}
-async function importPayrollExcel(input){ const file=input.files&&input.files[0]; input.value=''; if(!file)return; try{const all=await hrExcelRows(file); if(!all.length)return toast('الملف فارغ','err'); const headers=all[0].map(x=>String(x??'')); const rows=all.slice(1).filter(r=>r.some(v=>String(v??'').trim()!=='')); const month=hrEditing.payMonth||new Date().toISOString().slice(0,7); const num=(v)=>Number(String(v||0).replace(/[,،]/g,''))||0; const lines=rows.map((row,i)=>{const net=num(hrCell(row,headers,['الصافي','net'],row[9])); const basic=num(hrCell(row,headers,['أساسي','basic'],row[2])); const allowances=num(hrCell(row,headers,['بدلات','allowances'],row[3])); return {employee_id:'',name:hrCell(row,headers,['الموظف','الاسم','employee','name'],row[1]||('صف '+(i+1))),code:hrCell(row,headers,['الرمز','code'],row[0]||''),basic,allowances,days:num(hrCell(row,headers,['أيام خصم','days'],row[4])),absenceDeduction:num(hrCell(row,headers,['خصم غياب','absence'],row[5])),insurance:num(hrCell(row,headers,['تأمينات','insurance'],row[6])),tax:num(hrCell(row,headers,['ضريبة','tax'],row[7])),advanceDeduction:num(hrCell(row,headers,['سلفة','advance'],row[8])),net,raw_row:row};}); const totals={earned:lines.reduce((a,l)=>a+num(l.basic)+num(l.allowances)-num(l.absenceDeduction),0),insurance:lines.reduce((a,l)=>a+l.insurance,0),tax:lines.reduce((a,l)=>a+l.tax,0),advance:lines.reduce((a,l)=>a+l.advanceDeduction,0),net:lines.reduce((a,l)=>a+l.net,0)}; const old=HR.cache.payrolls.findIndex(p=>p.month===month); const rec={id:HR.uid(),no:'PAYROLL-'+month,month,status:'imported',source:'excel',source_file:file.name,raw_headers:headers,raw_rows:rows,lines,totals}; if(old>=0)HR.cache.payrolls[old]=rec;else HR.cache.payrolls.push(rec); await HR.persist(); hrEditing.payMonth=month; renderPayroll(); toast('تم جلب '+rows.length+' صفاً كما هي من ملف Excel'); }catch(e){toast('تعذر قراءة ملف Excel: '+errMsg(e),'err');} }
+async function importPayrollExcel(input){ const file=input.files&&input.files[0]; input.value=''; if(!file)return; try{const all=await hrExcelRows(file); if(!all.length)return toast('الملف فارغ','err'); const headers=all[0].map(x=>String(x??'')); const rows=all.slice(1).filter(r=>r.some(v=>String(v??'').trim()!=='')); const month=hrEditing.payMonth||new Date().toISOString().slice(0,7); const num=(v)=>Number(String(v||0).replace(/[,،]/g,''))||0; const lines=rows.map((row,i)=>{const net=num(hrCell(row,headers,['الصافي','net'],row[9])); const basic=num(hrCell(row,headers,['أساسي','basic'],row[2])); const allowances=num(hrCell(row,headers,['بدلات','allowances'],row[3])); return {employee_id:'',name:hrCell(row,headers,['الموظف','الاسم','employee','name'],row[1]||('صف '+(i+1))),code:hrCell(row,headers,['الرمز','code'],row[0]||''),basic,allowances,days:num(hrCell(row,headers,['أيام خصم','days'],row[4])),absenceDeduction:num(hrCell(row,headers,['خصم غياب','absence'],row[5])),insurance:num(hrCell(row,headers,['تأمينات','insurance'],row[6])),tax:num(hrCell(row,headers,['ضريبة','tax'],row[7])),advanceDeduction:num(hrCell(row,headers,['سلفة','advance'],row[8])),net,raw_row:row};}); const totals={earned:lines.reduce((a,l)=>a+num(l.basic)+num(l.allowances)-num(l.absenceDeduction),0),insurance:lines.reduce((a,l)=>a+l.insurance,0),tax:lines.reduce((a,l)=>a+l.tax,0),advance:lines.reduce((a,l)=>a+l.advanceDeduction,0),net:lines.reduce((a,l)=>a+l.net,0)}; const old=HR.cache.payrolls.findIndex(p=>p.month===month); const rec={id:HR.uid(),no:'PAYROLL-'+month,month,status:'imported',created_at:new Date().toISOString(),source:'excel',source_file:file.name,raw_headers:headers,raw_rows:rows,lines,totals}; if(old>=0)HR.cache.payrolls[old]=rec;else HR.cache.payrolls.push(rec); await HR.persist(); hrEditing.payMonth=month; renderPayroll(); toast('تم جلب '+rows.length+' صفاً كما هي من ملف Excel'); }catch(e){toast('تعذر قراءة ملف Excel: '+errMsg(e),'err');} }
 
 function renderPayroll() {
   const month = hrEditing.payMonth || new Date().toISOString().slice(0, 7);
@@ -540,7 +661,8 @@ async function postPayroll() {
       });
     });
     const prev = HR.cache.payrolls.findIndex(p => p.month === month);
-    const rec = Object.assign(preview, { id: HR.uid(), no, status: 'posted', journal_mv: no, cash_account_id: cashId });
+    const nowIso = new Date().toISOString();
+    const rec = Object.assign(preview, { id: HR.uid(), no, status: 'posted', journal_mv: no, cash_account_id: cashId, created_at: nowIso, posted_at: nowIso });
     if (prev >= 0) HR.cache.payrolls[prev] = rec;
     else HR.cache.payrolls.push(rec);
     await HR.persist();
@@ -647,28 +769,80 @@ async function postEos() {
 }
 
 function openEmployeeStatement(id) { hrEditing.statementId = id; showHr('statement'); }
-function cvPreviewHtml(emp) {
-  if (!emp || !emp.cv_data) return '<div class="box"><h3>السيرة الذاتية</h3><p>لا توجد سيرة ذاتية مرفقة.</p></div>';
+
+/* ---------- السيرة الذاتية داخل الكشف ---------- */
+function cvPreviewHtml(emp, url) {
+  if (!CV.hasCv(emp)) return '<div class="box"><h3>السيرة الذاتية</h3><p>لا توجد سيرة ذاتية مرفقة.</p></div>';
+  const label = esc(emp.cv_name || 'السيرة الذاتية') + (emp.cv_size ? ' — ' + esc(cvFmtSize(emp.cv_size)) : '');
+  const dl = `<p><button class="btn btn-sm btn-teal" onclick="downloadCv('${esc(emp.id)}')">تنزيل السيرة</button></p>`;
+  if (!url) return `<div class="box"><h3>السيرة الذاتية — ${label}</h3><p>تعذر تحميل المعاينة.</p>${dl}</div>`;
   const type = String(emp.cv_type || '').toLowerCase();
-  const label = esc(emp.cv_name || 'السيرة الذاتية');
-  if (type.includes('pdf') || type.startsWith('image/')) return `<div class="box"><h3>السيرة الذاتية — ${label}</h3><iframe src="${esc(emp.cv_data)}" title="السيرة الذاتية" style="width:100%;height:560px;border:1px solid #ddd;border-radius:8px;background:#fff"></iframe><p><a class="btn btn-sm btn-teal" href="${esc(emp.cv_data)}" download="${label}">تنزيل السيرة</a></p></div>`;
-  return `<div class="box"><h3>السيرة الذاتية — ${label}</h3><p>هذا النوع من الملفات لا يعرض داخل المتصفح.</p><a class="btn btn-sm btn-teal" href="${esc(emp.cv_data)}" download="${label}">تنزيل السيرة كاملة</a></div>`;
+  if (CV.isPdf(emp) || type.startsWith('image/')) {
+    return `<div class="box"><h3>السيرة الذاتية — ${label}</h3><iframe src="${esc(url)}" title="السيرة الذاتية" style="width:100%;height:560px;border:1px solid #ddd;border-radius:8px;background:#fff"></iframe>${dl}</div>`;
+  }
+  return `<div class="box"><h3>السيرة الذاتية — ${label}</h3><p>هذا النوع من الملفات لا يعرض داخل المتصفح.</p>${dl}</div>`;
 }
 
-function renderStatement() {
-  const id = hrEditing.statementId || '';
-  const emp = id ? HR.employee(id) : null;
-  let body = '<p class="hint">اختر موظفاً لعرض كشفه.</p>';
-  if (emp) {
-    const job = HR.job(emp.job_id);
-    const year = new Date().getFullYear();
-    const used = HR.leaveDaysUsed(emp.id, year, 'annual');
-    const adv = HR.cache.advances.filter(a => a.employee_id === emp.id);
-    const leaves = HR.cache.leaves.filter(l => l.employee_id === emp.id).sort((a, b) => String(b.from || '').localeCompare(String(a.from || '')));
-    const pays = HR.cache.payrolls.filter(p => p.status === 'posted' && (p.lines || []).some(l => l.employee_id === emp.id));
-    const att = HR.cache.attendance.filter(a => a.employee_id === emp.id);
-    const absent = att.filter(a => a.status === 'absent').length;
-    body = `
+function cvPrintHtml(emp, url) {
+  if (!CV.hasCv(emp)) return '<div class="box cv-print-empty"><h3>السيرة الذاتية</h3><p>لا توجد سيرة ذاتية مرفقة.</p></div>';
+  const type = String(emp.cv_type || '').toLowerCase();
+  const label = esc(emp.cv_name || 'السيرة الذاتية');
+  if (!url) return `<div class="box cv-print-block"><h3>السيرة الذاتية — ${label}</h3><p>تعذر تحميل السيرة للطباعة. استخدم زر تنزيل السيرة.</p></div>`;
+  if (type.startsWith('image/')) {
+    return `<div class="box cv-print-block"><h3>السيرة الذاتية — ${label}</h3><img class="cv-print-image" src="${esc(url)}" alt="${label}"></div>`;
+  }
+  if (CV.isPdf(emp)) {
+    return `<div class="box cv-print-block cv-print-pdf"><h3>السيرة الذاتية — ${label}</h3><object class="cv-print-pdf-object" data="${esc(url)}" type="application/pdf"><p>تعذر عرض ملف PDF داخل الطباعة. استخدم زر تنزيل السيرة لطباعتها كاملة.</p></object></div>`;
+  }
+  return `<div class="box cv-print-block"><h3>السيرة الذاتية — ${label}</h3><p>هذا النوع من الملفات لا يُعرض داخل الطباعة.</p></div>`;
+}
+
+async function fillStatementCv(emp) {
+  const box = document.getElementById('st-cv');
+  if (!box) return;
+  let url = '';
+  try { url = CV.hasCv(emp) ? await CV.viewUrl(emp) : ''; } catch (_) { url = ''; }
+  // تجاهل النتيجة إن غيّر المستخدم الموظف أثناء التحميل
+  if (hrEditing.statementId !== emp.id || !document.getElementById('st-cv')) return;
+  document.getElementById('st-cv').innerHTML = cvPreviewHtml(emp, url);
+}
+
+/* ---------- رواتب الموظف (مصدر بيانات الشاشة والطباعة والتصدير) ----------
+   تُقرأ دائماً من HR.cache.payrolls بعد المزامنة — فالراتب المحذوف لا يظهر.
+   في الطباعة/التصدير: يُستبعد أي راتب أُنشئ قبل أقل من 24 ساعة. */
+function employeePayrolls(empId, opts) {
+  const now = (opts && opts.now) || Date.now();
+  const all = HR.cache.payrolls
+    .filter(p => p.status === 'posted' && (p.lines || []).some(l => l.employee_id === empId))
+    .sort((a, b) => String(a.month).localeCompare(String(b.month)));
+  if (!opts || !opts.printable) return { rows: all, hidden: [] };
+  return { rows: all.filter(p => HR.isPrintable(p, now)), hidden: all.filter(p => !HR.isPrintable(p, now)) };
+}
+
+function fmtDateTimeLocal(ms) {
+  return new Date(ms).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function statementBodyHtml(emp, opts) {
+  opts = opts || {};
+  const print = !!opts.print;
+  const now = opts.now || Date.now();
+  const job = HR.job(emp.job_id);
+  const year = new Date().getFullYear();
+  const used = HR.leaveDaysUsed(emp.id, year, 'annual');
+  const adv = HR.cache.advances.filter(a => a.employee_id === emp.id);
+  const leaves = HR.cache.leaves.filter(l => l.employee_id === emp.id).sort((a, b) => String(b.from || '').localeCompare(String(a.from || '')));
+  const pays = employeePayrolls(emp.id, { printable: print, now }).rows;
+  const att = HR.cache.attendance.filter(a => a.employee_id === emp.id);
+  const absent = att.filter(a => a.status === 'absent').length;
+  const payRows = pays.map(p => {
+    const l = p.lines.find(x => x.employee_id === emp.id);
+    const pending = !print && !HR.isPrintable(p, now)
+      ? ` <span class="badge draft" title="قاعدة الـ 24 ساعة">يظهر في الطباعة بعد ${esc(fmtDateTimeLocal(HR.printableAt(p)))}</span>` : '';
+    return `<tr><td>${esc(p.month)}${pending}</td><td class="num">${fmt(l.earned)}</td><td class="num">${fmt(l.insurance)}</td><td class="num">${fmt(l.tax)}</td><td class="num">${fmt(l.advanceDeduction)}</td><td class="num">${fmt(l.net)}</td></tr>`;
+  }).join('') || '<tr><td colspan="6" class="empty-state">لا مسيرات</td></tr>';
+  const cv = print ? cvPrintHtml(emp, opts.cvUrl) : '<div id="st-cv"><div class="box"><h3>السيرة الذاتية</h3><p>جارٍ التحميل…</p></div></div>';
+  return `
       <div class="cards-grid">
         <div class="card"><div class="lbl">الوظيفة</div><div class="val" style="font-size:18px">${esc(job ? job.title : '—')}</div></div>
         <div class="card"><div class="lbl">الراتب الأساسي</div><div class="val">${fmt(emp.basic_salary)}</div></div>
@@ -677,14 +851,11 @@ function renderStatement() {
       </div>
       <p class="hint">التعيين ${esc(emp.hire_date || '—')} — غياب مسجّل ${absent} يوم — الحالة ${emp.status === 'ended' ? 'منتهية' : 'نشط'}
         ${emp.eos_amount ? ' — مكافأة نهاية خدمة ' + fmt(emp.eos_amount) : ''}</p>
-      ${cvPreviewHtml(emp)}
+      ${cv}
       <h3 style="margin:12px 0">الرواتب المرحلة</h3>
       <div class="tbl-wrap"><table class="tbl"><thead><tr>
         <th>الشهر</th><th class="num">مستحق</th><th class="num">تأمينات</th><th class="num">ضريبة</th><th class="num">سلفة</th><th class="num">صافي</th>
-      </tr></thead><tbody>${pays.map(p => {
-        const l = p.lines.find(x => x.employee_id === emp.id);
-        return `<tr><td>${esc(p.month)}</td><td class="num">${fmt(l.earned)}</td><td class="num">${fmt(l.insurance)}</td><td class="num">${fmt(l.tax)}</td><td class="num">${fmt(l.advanceDeduction)}</td><td class="num">${fmt(l.net)}</td></tr>`;
-      }).join('') || '<tr><td colspan="6" class="empty-state">لا مسيرات</td></tr>'}</tbody></table></div>
+      </tr></thead><tbody>${payRows}</tbody></table></div>
       <h3 style="margin:12px 0">السلف</h3>
       <div class="tbl-wrap"><table class="tbl"><thead><tr>
         <th>الرقم</th><th class="num">التاريخ</th><th class="num">المبلغ</th><th class="num">المتبقي</th><th>الحالة</th>
@@ -693,7 +864,12 @@ function renderStatement() {
       <div class="tbl-wrap"><table class="tbl"><thead><tr><th>النوع</th><th class="num">من</th><th class="num">إلى</th><th class="num">الأيام</th><th>الحالة</th><th>البيان</th></tr></thead><tbody>${leaves.map(l => `<tr><td>${l.kind === 'annual' ? 'سنوية' : l.kind === 'sick' ? 'مرضية' : 'بدون راتب'}</td><td class="num">${esc(l.from || '—')}</td><td class="num">${esc(l.to || '—')}</td><td class="num">${fmt(l.days || 0)}</td><td>${l.status === 'approved' ? 'معتمدة' : l.status === 'rejected' ? 'مرفوضة' : 'معلقة'}</td><td>${esc(l.note || '')}</td></tr>`).join('') || '<tr><td colspan="6" class="empty-state">لا إجازات</td></tr>'}</tbody></table></div>
       <h3 style="margin:12px 0">الحضور والغياب</h3>
       <div class="tbl-wrap"><table class="tbl"><thead><tr><th class="num">التاريخ</th><th>الحالة</th><th>البيان</th></tr></thead><tbody>${att.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).map(a => `<tr><td class="num">${esc(a.date || '—')}</td><td>${esc(HR_ATT[a.status] || a.status || '—')}</td><td>${esc(a.note || '')}</td></tr>`).join('') || '<tr><td colspan="3" class="empty-state">لا سجلات حضور</td></tr>'}</tbody></table></div>`;
-  }
+}
+
+function renderStatement() {
+  const id = hrEditing.statementId || '';
+  const emp = id ? HR.employee(id) : null;
+  const body = emp ? statementBodyHtml(emp) : '<p class="hint">اختر موظفاً لعرض كشفه.</p>';
   $('#panel-statement').innerHTML = `
     <div class="panel">
       <div class="panel-head"><h3>كشف الموظف</h3>
@@ -708,45 +884,41 @@ function renderStatement() {
             ${HR.cache.employees.map(e => `<option value="${esc(e.id)}" ${e.id === id ? 'selected' : ''}>${esc(e.code)} — ${esc(e.name)}</option>`).join('')}
           </select></div>
       </div>
+      <p class="hint" style="padding:0 16px">الراتب المضاف حديثاً لا يظهر في الكشف المطبوع إلا بعد مرور 24 ساعة على إضافته.</p>
       <div id="st-body">${body}</div>
     </div>`;
+  if (emp) fillStatementCv(emp);
 }
 
-function cvPrintHtml(emp) {
-  if (!emp || !emp.cv_data) return '<div class="box cv-print-empty"><h3>السيرة الذاتية</h3><p>لا توجد سيرة ذاتية مرفقة.</p></div>';
-  const type = String(emp.cv_type || '').toLowerCase();
-  const label = esc(emp.cv_name || 'السيرة الذاتية');
-  if (type.startsWith('image/')) {
-    return `<div class="box cv-print-block"><h3>السيرة الذاتية — ${label}</h3><img class="cv-print-image" src="${esc(emp.cv_data)}" alt="${label}"></div>`;
-  }
-  if (type.includes('pdf')) {
-    return `<div class="box cv-print-block cv-print-pdf"><h3>السيرة الذاتية — ${label}</h3><object class="cv-print-pdf-object" data="${esc(emp.cv_data)}" type="application/pdf"><p>تعذر عرض ملف PDF داخل الطباعة. استخدم زر تنزيل السيرة لطباعتها كاملة.</p></object></div>`;
-  }
-  return `<div class="box cv-print-block"><h3>السيرة الذاتية — ${label}</h3><p>هذا النوع من الملفات لا يُعرض داخل الطباعة.</p><a href="${esc(emp.cv_data)}" download="${label}">تنزيل السيرة كاملة</a></div>`;
-}
-
-function printStatement() {
+/* الطباعة تُبنى من البيانات مباشرة (وليس من نسخة HTML المعروضة) حتى تطبّق قاعدة
+   الـ 24 ساعة بدقة لحظة الطباعة ولا تحمل أي صف قديم من الشاشة. */
+async function printStatement() {
   const emp = HR.employee(hrEditing.statementId);
   if (!emp) return toast('اختر الموظف', 'err');
-  const statementHtml = $('#st-body').innerHTML;
-  // استبدال iframe ذي الارتفاع الثابت بعنصر طباعة يتمدد مع الصورة أو المستند.
-  const cvOnScreen = cvPreviewHtml(emp);
-  const cvForPrint = cvPrintHtml(emp);
-  const printableBody = statementHtml.includes(cvOnScreen) ? statementHtml.replace(cvOnScreen, cvForPrint) : statementHtml;
-  const html = `<div class="bar"></div><div class="pad hr-print-sheet"><h1>كشف موظف — ${esc(emp.name)}</h1><p>${esc(emp.code)} — ${esc(APP.settings.company_name || '')}</p>${printableBody}</div><style>
+  if (typeof showDoc !== 'function') return toast('تعذر فتح الطباعة', 'err');
+  const now = Date.now();
+  let cvUrl = '';
+  try { cvUrl = CV.hasCv(emp) ? await CV.viewUrl(emp) : ''; } catch (_) { cvUrl = ''; }
+  const hidden = employeePayrolls(emp.id, { printable: true, now }).hidden;
+  const html = `<div class="bar"></div><div class="pad hr-print-sheet"><h1>كشف موظف — ${esc(emp.name)}</h1><p>${esc(emp.code)} — ${esc(APP.settings.company_name || '')}</p>${statementBodyHtml(emp, { print: true, now, cvUrl })}</div><style>
     .hr-print-sheet .cv-print-block{page-break-inside:avoid;break-inside:avoid;background:#fff}
     .hr-print-sheet .cv-print-image{display:block;width:auto;max-width:100%;height:auto;max-height:none;object-fit:contain;margin:0 auto}
     .hr-print-sheet .cv-print-pdf-object{display:block;width:100%;height:1050px;border:1px solid #ddd;background:#fff}
     @media print{.hr-print-sheet .cv-print-image{max-width:100%;height:auto!important}.hr-print-sheet .cv-print-pdf-object{height:1050px!important}.hr-print-sheet .cv-print-block{page-break-before:always}}
   </style>`;
-  if (typeof showDoc === 'function') showDoc(html);
+  showDoc(html);
+  if (hidden.length) {
+    const first = Math.min(...hidden.map(p => HR.printableAt(p)));
+    toast('استُبعد ' + hidden.length + ' راتب أُضيف خلال آخر 24 ساعة — يظهر في الطباعة بعد ' + fmtDateTimeLocal(first));
+  }
 }
+
 function exportStatement() {
   const emp = HR.employee(hrEditing.statementId);
   if (!emp) return toast('اختر الموظف', 'err');
   const aoa = [['كشف', emp.name, emp.code], ['أساسي', emp.basic_salary, 'بدلات', emp.allowances], []];
   aoa.push(['شهر', 'مستحق', 'تأمينات', 'ضريبة', 'سلفة', 'صافي']);
-  HR.cache.payrolls.filter(p => p.status === 'posted').forEach(p => {
+  employeePayrolls(emp.id, { printable: true }).rows.forEach(p => {
     const l = (p.lines || []).find(x => x.employee_id === emp.id);
     if (l) aoa.push([p.month, l.earned, l.insurance, l.tax, l.advanceDeduction, l.net]);
   });
@@ -761,5 +933,21 @@ APP.requireAuth({ activePath: 'hr.html' }).then(async () => {
     HR_ACCOUNTS = await DB.accounts();
     $$('#hr-tabs button').forEach(b => b.addEventListener('click', () => showHr(b.dataset.tab)));
     showHr('employees');
+    migrateLegacyCvs();
   } catch (e) { toast(errMsg(e), 'err'); }
 });
+
+/* نقل السير القديمة المضمّنة داخل hr_store_v1 إلى التخزين — في الخلفية، مرة واحدة، للمدير فقط
+   (كتابة hr_store_v1 تتطلب صلاحية المدير). لا يمس السير غير PDF. */
+async function migrateLegacyCvs() {
+  if (!APP.isAdmin || !APP.isAdmin()) return;
+  if (!HR.cache.employees.some(e => e.cv_data && !e.cv_path)) return;
+  try {
+    const moved = await CV.migrateLegacy(HR.cache.employees);
+    if (!moved) return;
+    await HR.persist();
+    toast('نُقلت ' + moved + ' سيرة ذاتية إلى التخزين السحابي');
+    const active = $('#hr-tabs .btn-gold');
+    if (active && (active.dataset.tab === 'employees' || active.dataset.tab === 'statement')) showHr(active.dataset.tab);
+  } catch (_) { /* تبقى السير القديمة كما هي وتعمل */ }
+}

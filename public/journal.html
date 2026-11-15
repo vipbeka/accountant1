@@ -79,6 +79,7 @@
           <div class="modal-foot">
             <button class="btn btn-dark" onclick="saveEntry('draft')">💾 حفظ كمسودة</button>
             <button class="btn btn-green" onclick="saveEntry('posted')">✅ حفظ وترحيل</button>
+            <button class="btn btn-dark" type="button" id="entry-reset" onclick="resetJournalDraft()">🧹 مسح النموذج</button>
             <button class="btn btn-dark" data-close-modal>إلغاء</button>
           </div>
         </div>
@@ -136,6 +137,7 @@
 <script src="assets/js/auth.js?v=15"></script>
 <script src="assets/js/db.js?v=15"></script>
 <script src="assets/js/smart-accounting.js?v=4"></script>
+<script src="assets/js/form-draft.js?v=1"></script>
 <script>
 'use strict';
 
@@ -230,15 +232,72 @@ function doExport() {
 }
 
 /* ===== محرر القيد ===== */
-function newEntry() {
-  editingId = null;
-  originalMovementNo = '';
-  setMvLocked(false);
-  $('#entry-modal-title').textContent = 'قيد يومية جديد';
+/* ===== مسودة القيد الجديد (حفظ تلقائي في المتصفح) =====
+   تُحفظ فقط للقيود الجديدة (editingId = null). تعديل قيد قائم يُقرأ دائماً من القاعدة. */
+const JOURNAL_DRAFT = 'journal.new';
+let journalDraftOn = false;
+
+function journalDraftKey() { return (journalDraftOn && !editingId) ? JOURNAL_DRAFT : null; }
+
+function collectJournalDraft() {
+  return {
+    mv: $('#e-mv').value, date: $('#e-date').value, region: $('#e-region').value,
+    type: $('#e-type').value, desc: $('#e-desc').value,
+    lines: $$('#lines-body tr').map(tr => ({ a: $('.ln-acc', tr).value, d: $('.ln-debit', tr).value, c: $('.ln-credit', tr).value })),
+  };
+}
+
+function journalDraftEmpty(d) {
+  return !String(d.mv || '').trim() && !String(d.desc || '').trim()
+    && !(d.lines || []).some(l => l.a || String(l.d || '').trim() || String(l.c || '').trim());
+}
+
+function applyJournalDraft(d) {
+  if (typeof d.mv === 'string') $('#e-mv').value = d.mv;
+  if (typeof d.date === 'string' && d.date) $('#e-date').value = d.date;
+  if (typeof d.region === 'string' && $$('#e-region option').some(o => o.value === d.region)) $('#e-region').value = d.region;
+  if (typeof d.type === 'string' && $$('#e-type option').some(o => o.value === d.type)) $('#e-type').value = d.type;
+  if (typeof d.desc === 'string') $('#e-desc').value = d.desc;
+  const lines = Array.isArray(d.lines) ? d.lines.filter(l => l && typeof l === 'object').slice(0, 500) : [];
+  if (lines.length) {
+    $('#lines-body').innerHTML = '';
+    lines.forEach(l => addLine(l.a || '', String(l.d ?? '').replace(/[^\d.]/g, ''), String(l.c ?? '').replace(/[^\d.]/g, '')));
+  }
+}
+
+function blankJournalForm() {
   $('#e-desc').value = ''; $('#e-mv').value = ''; $('#e-type').value = 'عادي'; $('#e-date').value = today();
   $('#lines-body').innerHTML = '';
   addLine(); addLine();
+}
+
+function resetJournalDraft() {
+  if (editingId) { FormDraft.banner($('#entryModal .modal-body'), null); return editEntry(editingId); }
+  FormDraft.clear(JOURNAL_DRAFT);
+  journalDraftOn = false;
+  blankJournalForm();
   suggestFromDesc();
+  journalDraftOn = true;
+  FormDraft.banner($('#entryModal .modal-body'), null);
+  toast('تم مسح النموذج');
+}
+
+function newEntry() {
+  editingId = null;
+  originalMovementNo = '';
+  journalDraftOn = false; // لا تحفظ أثناء التعبئة البرمجية
+  setMvLocked(false);
+  $('#entry-modal-title').textContent = 'قيد يومية جديد';
+  blankJournalForm();
+  const draft = FormDraft.load(JOURNAL_DRAFT);
+  if (draft) applyJournalDraft(draft.data);
+  recalc();
+  suggestFromDesc();
+  FormDraft.banner($('#entryModal .modal-body'), draft, resetJournalDraft);
+  FormDraft.watch($('#entryModal'), {
+    key: journalDraftKey, collect: collectJournalDraft, isEmpty: journalDraftEmpty, observe: $('#lines-body'),
+  });
+  journalDraftOn = true;
   openModal('entryModal');
 }
 
@@ -332,6 +391,7 @@ function applySmartTemplate(i) {
 }
 
 async function saveEntry(status) {
+  const wasNew = !editingId;
   const p = entryPayload(status);
   const err = validateClient(p);
   if (err) return toast(err, 'err');
@@ -348,6 +408,7 @@ async function saveEntry(status) {
     } else {
       await DB.createEntry(p);
     }
+    if (wasNew) { journalDraftOn = false; FormDraft.clear(JOURNAL_DRAFT); }
     closeModal('entryModal');
     toast(editingId ? 'تم تعديل نفس القيد بدون إنشاء حركة جديدة' : (status === 'posted' ? 'تم حفظ وترحيل القيد' : 'تم حفظ القيد كمسودة'));
     editingId = null;
@@ -373,6 +434,8 @@ function repeatEntry(id) {
   toast('هذا قيد جديد منسوخ — اكتب رقم حركة مختلفًا عن الأصل');
 }
 function openEntryEditor(e, title, clearMv) {
+  journalDraftOn = false;
+  if (typeof FormDraft !== 'undefined') FormDraft.banner($('#entryModal .modal-body'), null);
   $('#entry-modal-title').textContent = title;
   $('#e-mv').value = clearMv ? '' : e.movement_no;
   setMvLocked(!clearMv && !!editingId);

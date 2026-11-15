@@ -120,10 +120,16 @@ async function postV(id, silent) {
       lines: voucherJournalLines(v),
     });
     await EXT.markVoucher(id, { status: 'posted', journal_mv: v.no });
-    if (typeof HR !== 'undefined' && HR.syncSalaryVouchers) await HR.syncSalaryVouchers(EXT.vouchers(), EXT.parties());
+    if (v.kind === 'salary') await syncHrSalaries();
     toast('تم ترحيل السند وحفظه في قاعدة البيانات ✔');
     renderList();
   } catch (e) { toast(errMsg(e), 'err'); }
+}
+
+async function syncHrSalaries() {
+  if (typeof HR === 'undefined' || !HR.syncSalaryVouchers) return;
+  try { await HR.syncSalaryVouchers(EXT.vouchers(), EXT.parties(), { fresh: true }); }
+  catch (e) { toast('تعذر تحديث سجل الرواتب في شؤون الموظفين: ' + errMsg(e), 'err'); }
 }
 
 async function delV(id) {
@@ -138,6 +144,8 @@ async function delV(id) {
     await EXT.deleteVoucher(id);
     toast('تم الحذف');
   }
+  // أزل الراتب فوراً من سجل الموارد البشرية (وكشف الموظف المطبوع) — لا تنتظر فتح صفحة الموظفين
+  if (v.kind === 'salary') await syncHrSalaries();
   renderList();
 }
 
