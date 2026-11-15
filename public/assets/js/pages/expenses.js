@@ -12,7 +12,7 @@ function expenseForm(id) {
 }
 function collectExpense() { return { id: expenseEditing || undefined, date: $('#x-date').value, type: $('#x-type').value, party: $('#x-party').value.trim(), amount: $('#x-amount').value, description: $('#x-desc').value.trim(), account_id: $('#x-account').value, cash_account_id: $('#x-cash').value, region: APP.regions[0] || '', status: 'draft' }; }
 async function saveExpense(status) { try { const x=collectExpense(); const f=await fileData($('#x-file').files[0]); if(f){x.file_name=f.name;x.file_type=f.type;x.file_data=f.data;} const saved=await EXPENSES.save(x); EXP_DRAFT.done(); if(status==='posted') await postExpense(saved.id,true); else {toast('تم حفظ المصروف كمسودة');closeModal('expenseModal');renderExpenses();} } catch(e){toast(errMsg(e),'err');} }
-async function postExpense(id,silent) { const x=EXPENSES.get(id); if(!x||x.status==='posted') return; if(!silent&&!await confirmDlg('ترحيل المصروف كقيد يومية؟')) return; try { const mv=x.no; await DB.createEntry({movement_no:mv,entry_date:x.date,region:x.region||APP.regions[0]||'',description:'مصروف ['+x.type+'] '+(x.party?'— '+x.party+' ':'')+(x.description?'— '+x.description:''),entry_type:'عادي',status:'posted',lines:[{account_id:Number(x.account_id),debit:x.amount,credit:0},{account_id:Number(x.cash_account_id),debit:0,credit:x.amount}]}); await EXPENSES.markPosted(id,mv); toast('تم ترحيل المصروف وحفظ القيد ✔'); closeModal('expenseModal'); renderExpenses(); } catch(e){toast(errMsg(e),'err');} }
+async function postExpense(id,silent) { const x=EXPENSES.get(id); if(!x||x.status==='posted') return; if(!x.account_id||!x.cash_account_id){ toast('اختر حساب المصروف وحساب الدفع لهذا المصروف قبل الترحيل','err'); return expenseForm(id); } if(!silent&&!await confirmDlg('ترحيل المصروف كقيد يومية؟')) return; try { const mv=x.no; await DB.createEntry({movement_no:mv,entry_date:x.date,region:x.region||APP.regions[0]||'',description:'مصروف ['+x.type+'] '+(x.party?'— '+x.party+' ':'')+(x.description?'— '+x.description:''),entry_type:'عادي',status:'posted',lines:[{account_id:Number(x.account_id),debit:x.amount,credit:0},{account_id:Number(x.cash_account_id),debit:0,credit:x.amount}]}); await EXPENSES.markPosted(id,mv); toast('تم ترحيل المصروف وحفظ القيد ✔'); closeModal('expenseModal'); renderExpenses(); } catch(e){toast(errMsg(e),'err');} }
 async function removeExpense(id){const x=EXPENSES.get(id);if(!x)return;if(!await confirmDlg('حذف هذا المصروف؟ سيتم حفظ نسخة منه في سجل العمليات ويمكن استرجاعه كمسودة.'))return;try{if(x.status==='posted'&&x.journal_mv){try{await DB.deleteEntryByMovement(x.journal_mv);}catch(e){return toast('تعذر حذف قيد اليومية المرتبط: '+errMsg(e),'err');}}await EXPENSES.remove(id);toast('تم حذف المصروف ويمكن استرجاعه من سجل العمليات');renderExpenses();}catch(e){toast(errMsg(e),'err');}}
 function accountName(id) { const a = EXP_ACCOUNTS.find(x => String(x.id) === String(id)); return a ? `${a.acc_no} - ${a.name}` : '—'; }
 function printExpense(id) {
@@ -34,10 +34,43 @@ function printAllExpenses(){
 }
 function buildExpenseToolbar(){ $('#toolbar').innerHTML=(APP.canWrite()?'<button class="btn btn-gold btn-sm" onclick="expenseForm()">➕ مصروف جديد</button>':'')+'<button class="btn btn-dark btn-sm" onclick="exportExpenses()">📊 تصدير Excel</button>'+(APP.canWrite()?'<button class="btn btn-teal btn-sm" onclick=\'document.getElementById("expense-import-file").click()\'>📥 جلب Excel</button>':'')+'<button class="btn btn-teal btn-sm" onclick="printAllExpenses()">🖨️ طباعة الكل</button>'; }
 
-function excelRows(file){ return new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=e=>{ try{ const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true}); const ws=wb.Sheets[wb.SheetNames[0]]; resolve(XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false})); }catch(x){reject(x);} }; r.onerror=reject; r.readAsArrayBuffer(file); }); }
-function normHeader(x){return String(x||'').trim().toLowerCase().replace(/[ـ_\-\/]/g,' ').replace(/\s+/g,' ');}
-function pickRow(row,headers,names,fallback=''){ const i=headers.findIndex(h=>names.some(n=>normHeader(h).includes(normHeader(n)))); return i>=0?String(row[i]??'').trim():fallback; }
-async function importExpensesExcel(input){ const file=input.files&&input.files[0]; input.value=''; if(!file)return; if(typeof XLSX==='undefined')return toast('لم يتم تحميل مكوّن Excel','err'); try{ const all=await excelRows(file); if(!all.length)return toast('الملف فارغ','err'); const headers=all[0].map(x=>String(x||'')); const rows=all.slice(1).filter(r=>r.some(v=>String(v??'').trim()!=='')); let count=0; for(const row of rows){ const amount=pickRow(row,headers,['المبلغ','amount','القيمة'],row[5]||'0').replace(/[,،]/g,''); if(!(Number(amount)>0))continue; await EXPENSES.save({date:pickRow(row,headers,['التاريخ','date'],todayISO()),type:pickRow(row,headers,['النوع','type'],'أخرى'),party:pickRow(row,headers,['الجهة','المستفيد','party','vendor']),amount,description:pickRow(row,headers,['البيان','الوصف','description','details']),account_id:pickRow(row,headers,['حساب المصروف','expense account','account'],''),cash_account_id:pickRow(row,headers,['الدفع من','الصندوق','cash','bank'],''),region:APP.regions[0]||'',status:'draft',imported_from:file.name,imported_row:row,imported_headers:headers}); count++; } renderExpenses(); toast('تم جلب '+count+' صفاً كمصاريف مسودة'); }catch(e){toast('تعذر قراءة ملف Excel: '+errMsg(e),'err');} }
+/* قراءة الملف: قيم خام (أرقام وتواريخ حقيقية بدل النص المنسّق)، وCSV بترميز UTF-8 أو Windows-1256 العربي */
+function excelRows(file){ return new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=e=>{ try{
+  const buf=new Uint8Array(e.target.result); let wb;
+  if(/\.(csv|txt)$/i.test(file.name||'')){
+    let text; try{ text=new TextDecoder('utf-8',{fatal:true}).decode(buf); }catch(_){ text=new TextDecoder('windows-1256').decode(buf); }
+    wb=XLSX.read(text.replace(/^﻿/,''),{type:'string',cellDates:true,raw:false});
+  } else wb=XLSX.read(buf,{type:'array',cellDates:true});
+  const name=wb.SheetNames.find(n=>{const ws=wb.Sheets[n];return ws&&ws['!ref'];})||wb.SheetNames[0];
+  resolve(XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:'',raw:true,blankrows:false}));
+}catch(x){reject(x);} }; r.onerror=()=>reject(new Error('تعذر قراءة الملف')); r.readAsArrayBuffer(file); }); }
+/* حسابات افتراضية لصفوف لا تحدد حساباً: أول حساب مصروفات (يفضَّل العمومية)، والصندوق/البنك */
+function expenseDefaultAccounts(){
+  const exp=EXP_ACCOUNTS.filter(a=>a.type==='مصروفات');
+  const def=exp.find(a=>/عموم|إدار|ادار|متنوع|اخرى|أخرى/.test(a.name||''))||exp[0]||null;
+  const cash=(typeof findAccHint==='function'&&findAccHint(EXP_ACCOUNTS,['صندوق','نقد','خزين','بنك','110']))||null;
+  return {defaultAccount:def,defaultCash:cash};
+}
+async function importExpensesExcel(input){
+  const file=input.files&&input.files[0]; input.value=''; if(!file)return;
+  if(typeof XLSX==='undefined')return toast('لم يتم تحميل مكوّن Excel — أعد تحميل الصفحة وتحقق من الاتصال','err');
+  let all;
+  try{ all=await excelRows(file); }catch(e){ return toast('تعذر قراءة ملف Excel: '+errMsg(e),'err'); }
+  const res=expBuildImport(all,Object.assign({accounts:EXP_ACCOUNTS,today:todayISO()},expenseDefaultAccounts()));
+  if(res.error)return toast(res.error,'err');
+  if(!res.items.length){
+    const why=res.skipped.slice(0,5).map(x=>'صف '+x.row+': '+x.reason).join(' | ');
+    return toast('لا توجد صفوف بمبلغ صالح في الملف'+(why?' — '+why:''),'err');
+  }
+  res.items.forEach(x=>{ x.region=APP.regions[0]||''; x.imported_from=file.name; });
+  try{
+    const added=await EXPENSES.saveMany(res.items);
+    renderExpenses();
+    const noAcc=added.filter(x=>!x.account_id||!x.cash_account_id).length;
+    toast('تم جلب '+added.length+' صفاً كمصاريف مسودة'+(res.skipped.length?' — تم تخطي '+res.skipped.length+' صف (بدون مبلغ أو صف إجمالي)':''));
+    if(noAcc)toast(noAcc+' مصروف بدون حساب مصروف/دفع — افتحه واختر الحسابات قبل الترحيل','err');
+  }catch(e){ toast('تعذر حفظ المصاريف المستوردة: '+errMsg(e),'err'); }
+}
 
 function exportExpenses(){if(typeof XLSX==='undefined') return toast('لم يتم تحميل مكوّن Excel — أعد تحديث الصفحة أو تحقق من الاتصال بالإنترنت','err'); const rows=[['الشركة',APP.settings.company_name||''],[],['الرقم','التاريخ','النوع','الجهة','البيان','المبلغ','الحالة']];EXPENSES.cache.items.forEach(x=>rows.push([x.no,x.date,x.type,x.party||'',x.description||'',x.amount,x.status==='posted'?'مرحل':'مسودة']));exportExcel('مصاريف-الشركة.xlsx','المصاريف',rows);}
 APP.requireAuth({activePath:'expenses.html'}).then(async()=>{try{await EXPENSES.hydrate();EXP_ACCOUNTS=await DB.accounts();$('#x-account').innerHTML=accOptionsHtml(EXP_ACCOUNTS.filter(a=>a.type==='مصروفات'))||accOptionsHtml(EXP_ACCOUNTS);$('#x-cash').innerHTML=accOptionsHtml(EXP_ACCOUNTS);buildExpenseToolbar();renderExpenses();}catch(e){toast(errMsg(e),'err');}});

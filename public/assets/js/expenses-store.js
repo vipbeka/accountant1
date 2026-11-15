@@ -35,6 +35,32 @@ const EXPENSES = {
     await this.persist();
     return this.get(item.id);
   },
+  /* حفظ دفعة واحدة لصفوف الاستيراد: كتابة واحدة لقاعدة البيانات بدل كتابة لكل صف.
+     المسودات المستوردة قد تصل بلا حسابات إن تعذرت مطابقتها — تُستكمل قبل الترحيل. */
+  async saveMany(items) {
+    await this.hydrate();
+    const now = new Date().toISOString();
+    const by = (APP.profile && APP.profile.full_name) || '';
+    const added = [];
+    const seqBefore = this.cache.seq;
+    for (const it of items) {
+      if (!it.date || !(Number(it.amount) > 0)) continue;
+      const item = { ...it, id: this.uid(), amount: Math.round(Number(it.amount) * 100) / 100, status: 'draft', created_at: now, created_by: by };
+      item.no = this.nextNo();
+      this.cache.items.push(item);
+      added.push(item);
+    }
+    if (added.length) {
+      try { await this.persist(); }
+      catch (e) { // تراجع: لا تبقِ صفوفاً غير محفوظة في الذاكرة
+        const ids = new Set(added.map(x => x.id));
+        this.cache.items = this.cache.items.filter(x => !ids.has(x.id));
+        this.cache.seq = seqBefore;
+        throw e;
+      }
+    }
+    return added;
+  },
   async remove(id) {
     await this.hydrate();
     const item = this.get(id);
