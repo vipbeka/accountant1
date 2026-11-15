@@ -2,6 +2,12 @@
 
 let ACCOUNTS = [], editingId = null;
 
+const INV_DRAFT = Drafts.register({
+  module: 'invoices', form: 'invoice', root: '#invModal', recordId: () => editingId,
+  rows: { container: '#i-lines', fields: ['ln-no', 'ln-sku', 'ln-desc', 'ln-qty', 'ln-price'], add: () => addInvLine(), min: 1 },
+  after: () => recalcInv(),
+});
+
 function onKindChange() {
   const sale = $('#i-kind').value === 'sale';
   $('#lbl-party-acc').textContent = sale ? 'حساب العملاء (مدينون) *' : 'حساب الموردين (دائنون) *';
@@ -101,6 +107,7 @@ function newInv() {
   if (rev) $('#i-income-acc').value = rev.id;
   if (pur) $('#i-exp-acc').value = pur.id;
   if (vat) $('#i-tax-acc').value = vat.id;
+  INV_DRAFT.open();
   openModal('invModal');
 }
 
@@ -126,6 +133,7 @@ function editInv(id) {
   (inv.lines || []).forEach(l => addInvLine(l.item_no, l.sku, l.desc, l.qty, l.price, l.unit));
   if (!(inv.lines || []).length) addInvLine();
   recalcInv();
+  INV_DRAFT.open();
   openModal('invModal');
 }
 
@@ -137,6 +145,7 @@ async function saveInv(status) {
     if (inv.kind === 'purchase' && !inv.expense_account_id) return toast('اختر حساب المشتريات', 'err');
     inv.status = status;
     const saved = await EXT.saveInvoice(inv);
+    INV_DRAFT.done();
     if (status === 'posted') await postInv(saved.id, true);
     else toast('تم حفظ المسودة في قاعدة البيانات');
     closeModal('invModal');

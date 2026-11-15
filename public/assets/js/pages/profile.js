@@ -2,6 +2,11 @@
 
 function profileRoleLabel(role) { return (ROLES && ROLES[role]) || role || '—'; }
 
+const PROFILE_DRAFT = Drafts.register({
+  module: 'profile', form: 'my-profile', root: '#profile-content', recordId: () => (APP.user && APP.user.id) || 'me',
+  fields: ['my-full-name', 'my-phone', 'my-job-title'], resetIn: () => document.querySelector('#profile-content .panel-body'), resetSmall: true,
+});
+
 function renderMyProfile() {
   const p = APP.profile || {};
   const email = APP.user && APP.user.email ? APP.user.email : '—';
@@ -38,6 +43,7 @@ function renderMyProfile() {
         <button class="btn btn-teal" onclick="saveMyPassword()">تغيير كلمة المرور</button>
       </div>
     </div>`;
+  PROFILE_DRAFT.open();
 }
 
 async function saveMyProfile() {
@@ -46,6 +52,7 @@ async function saveMyProfile() {
   try {
     const p = await DB.updateMyProfile({ full_name, phone: $('#my-phone').value, job_title: $('#my-job-title').value });
     APP.profile = { ...APP.profile, ...p };
+    PROFILE_DRAFT.done();
     renderMyProfile();
     toast('تم حفظ بيانات ملفك الشخصي');
   } catch (e) { toast(errMsg(e), 'err'); }

@@ -46,10 +46,13 @@ $('#search').addEventListener('input', e => {
   render(!q ? ACCOUNTS : ACCOUNTS.filter(a => a.acc_no.includes(q) || a.name.includes(q)));
 });
 
+const ACC_DRAFT = Drafts.register({ module: 'accounts', form: 'account', root: '#accModal', recordId: () => $('#f-id').value || null });
+
 function openAccModal() {
   $('#acc-modal-title').textContent = 'حساب جديد';
   $('#f-id').value = ''; $('#f-no').value = ''; $('#f-name').value = '';
   $('#f-type').value = ''; $('#f-open').value = '0'; $('#f-budget').value = '0';
+  ACC_DRAFT.open();
   openModal('accModal');
 }
 function editAcc(a) {
@@ -57,6 +60,7 @@ function editAcc(a) {
   $('#f-id').value = a.id; $('#f-no').value = a.acc_no;
   $('#f-name').value = a.name; $('#f-type').value = a.type || '';
   $('#f-open').value = a.opening_balance; $('#f-budget').value = a.budget || 0;
+  ACC_DRAFT.open();
   openModal('accModal');
 }
 
@@ -69,6 +73,7 @@ async function saveAccount() {
   try {
     const id = $('#f-id').value;
     if (id) await DB.updateAccount(id, body); else await DB.createAccount(body);
+    ACC_DRAFT.done();
     closeModal('accModal');
     toast(id ? 'تم تعديل الحساب' : 'تمت إضافة الحساب');
     load();

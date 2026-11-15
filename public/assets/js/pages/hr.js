@@ -7,6 +7,18 @@ const HR_LEAVE = { annual: 'سنوية', sick: 'مرضية', unpaid: 'بدون �
 const HR_ATT = { present: 'حضور', absent: 'غياب', leave: 'إجازة', late: 'تأخير' };
 const HR_EOS_REASON = { end: 'إنهاء من صاحب العمل', resign: 'استقالة', contract: 'انتهاء العقد' };
 
+/* ---------- الحفظ التلقائي لكل نماذج شؤون الموظفين (Drafts) ---------- */
+const HR_DRAFTS = {
+  employee: Drafts.register({ module: 'hr', form: 'employee', root: '#empModal', recordId: () => hrEditing.emp }),
+  job: Drafts.register({ module: 'hr', form: 'job', root: '#jobModal', recordId: () => hrEditing.job }),
+  attendance: Drafts.register({ module: 'hr', form: 'attendance', root: '#panel-attendance', exclude: ['att-month'], resetIn: '#panel-attendance .filters' }),
+  leave: Drafts.register({ module: 'hr', form: 'leave', root: '#panel-leaves', resetIn: '#panel-leaves .filters' }),
+  advance: Drafts.register({ module: 'hr', form: 'advance', root: '#panel-advances', resetIn: '#panel-advances .filters' }),
+  payroll: Drafts.register({ module: 'hr', form: 'payroll-post', root: '#panel-payroll', fields: ['pay-cash'], recordId: () => hrEditing.payMonth, resetIn: '#panel-payroll .filters' }),
+  eos: Drafts.register({ module: 'hr', form: 'end-of-service', root: '#panel-eos', resetIn: '#panel-eos .filters' }),
+};
+function hrDraftOpen(name) { if (APP.canWrite()) HR_DRAFTS[name].open(); }
+
 function hrRegion() {
   return (APP.regions && APP.regions[0]) || 'المركز الرئيسي';
 }
@@ -70,13 +82,12 @@ function renderJobs() {
       </div>
       <div class="modal-foot">
         <button class="btn btn-gold" onclick="saveJobForm()">حفظ</button>
-        <button class="btn btn-dark" type="button" onclick="resetJobForm()">مسح النموذج</button>
+        <button class="btn btn-dark" type="button" data-draft-reset>🧹 مسح النموذج</button>
         <button class="btn btn-dark" data-close-modal>إلغاء</button>
       </div>
     </div></div>`;
 }
 
-const JOB_FIELDS = { title: 'j-title', department: 'j-dept', basic_salary: 'j-basic', description: 'j-desc' };
 function fillJobFields(j) {
   j = j || { title: '', department: '', basic_salary: 0, description: '' };
   $('#j-title').value = j.title || '';
@@ -86,22 +97,9 @@ function fillJobFields(j) {
 }
 function editJob(id) {
   hrEditing.job = id || null;
-  hrEditing.jobDraftKey = 'hr.job.' + (id || 'new');
   fillJobFields(id ? HR.job(id) : null);
-  const draft = FormDraft.load(hrEditing.jobDraftKey);
-  if (draft) Object.keys(JOB_FIELDS).forEach(k => { if (typeof draft.data[k] === 'string') $('#' + JOB_FIELDS[k]).value = draft.data[k]; });
-  FormDraft.banner($('#jobModal .modal-body'), draft, resetJobForm);
-  FormDraft.watch($('#jobModal'), {
-    key: () => hrEditing.jobDraftKey || null,
-    collect: () => { const d = {}; Object.keys(JOB_FIELDS).forEach(k => { d[k] = $('#' + JOB_FIELDS[k]).value; }); return d; },
-  });
+  HR_DRAFTS.job.open();
   openModal('jobModal');
-}
-function resetJobForm() {
-  FormDraft.clear(hrEditing.jobDraftKey);
-  fillJobFields(hrEditing.job ? HR.job(hrEditing.job) : null);
-  FormDraft.banner($('#jobModal .modal-body'), null);
-  toast('تم مسح النموذج');
 }
 async function saveJobForm() {
   try {
@@ -112,8 +110,7 @@ async function saveJobForm() {
       basic_salary: $('#j-basic').value,
       description: $('#j-desc').value,
     });
-    FormDraft.clear(hrEditing.jobDraftKey);
-    hrEditing.jobDraftKey = null;
+    HR_DRAFTS.job.done();
     closeModal('jobModal');
     toast('تم حفظ الوظيفة');
     renderJobs();
@@ -177,7 +174,7 @@ function renderEmployees() {
       <div class="modal-foot">
         <button class="btn btn-gold" id="e-save" onclick="saveEmployeeForm()">حفظ</button>
         <button class="btn btn-dark" id="e-clear-cv" style="display:none" onclick="clearEmployeeCv()">حذف السيرة</button>
-        <button class="btn btn-dark" type="button" onclick="resetEmployeeForm()">مسح النموذج</button>
+        <button class="btn btn-dark" type="button" data-draft-reset>🧹 مسح النموذج</button>
         <button class="btn btn-dark" data-close-modal>إلغاء</button>
       </div>
     </div></div>`;
@@ -193,13 +190,6 @@ async function removeEmployee(id) {
     renderEmployees();
   } catch (e) { toast(errMsg(e), 'err'); }
 }
-/* ---------- مسودة نموذج الموظف ---------- */
-const EMP_FIELDS = { name: 'e-name', national_id: 'e-nid', phone: 'e-phone', job_id: 'e-job', hire_date: 'e-hire',
-  basic_salary: 'e-basic', allowances: 'e-allow', insurable_wage: 'e-insw', insurance_pct: 'e-insp',
-  tax_pct: 'e-taxp', annual_leave_days: 'e-leave' };
-
-function empDraftKey() { return hrEditing.empDraftKey || null; }
-
 function fillEmployeeFields(e) {
   $('#e-job').innerHTML = hrJobOptions(e && e.job_id);
   $('#e-name').value = e ? e.name : '';
@@ -215,25 +205,6 @@ function fillEmployeeFields(e) {
   $('#e-cv').value = '';
 }
 
-function collectEmployeeDraft() {
-  const d = {};
-  Object.keys(EMP_FIELDS).forEach(k => { d[k] = $('#' + EMP_FIELDS[k]).value; });
-  // الملف نفسه لا يُخزَّن أبداً (قد يكون مئات الميجابايت) — اسمه فقط للتذكير بإعادة اختياره
-  const f = $('#e-cv').files && $('#e-cv').files[0];
-  if (f) d.__file = f.name;
-  else if (hrEditing.empDraftFile) d.__file = hrEditing.empDraftFile;
-  return d;
-}
-
-function applyEmployeeDraft(d) {
-  Object.keys(EMP_FIELDS).forEach(k => {
-    if (typeof d[k] !== 'string') return;
-    const el = $('#' + EMP_FIELDS[k]);
-    if (el.tagName === 'SELECT' && d[k] && !$$('option', el).some(o => o.value === d[k])) return; // وظيفة حُذفت
-    el.value = d[k];
-  });
-}
-
 function showEmployeeCvInfo(e) {
   const box = $('#e-cv-current');
   if (!box) return;
@@ -244,31 +215,13 @@ function showEmployeeCvInfo(e) {
 
 function editEmployee(id) {
   hrEditing.emp = id || null;
-  hrEditing.empDraftFile = '';
-  hrEditing.empDraftKey = 'hr.employee.' + (id || 'new');
   const e = id ? HR.employee(id) : null;
   fillEmployeeFields(e);
   $('#e-clear-cv').style.display = e && CV.hasCv(e) ? '' : 'none';
   showEmployeeCvInfo(e);
   setCvProgress(null);
-  const draft = FormDraft.load(hrEditing.empDraftKey);
-  if (draft) {
-    applyEmployeeDraft(draft.data);
-    hrEditing.empDraftFile = draft.data.__file || '';
-  }
-  FormDraft.banner($('#empModal .modal-body'), draft, resetEmployeeForm);
-  FormDraft.watch($('#empModal'), { key: empDraftKey, collect: collectEmployeeDraft });
+  HR_DRAFTS.employee.open();
   openModal('empModal');
-}
-
-/* زر «مسح النموذج»: يحذف المسودة ويعيد الحقول لقيم السجل المحفوظ (أو فارغة لموظف جديد) */
-function resetEmployeeForm() {
-  FormDraft.clear(hrEditing.empDraftKey);
-  hrEditing.empDraftFile = '';
-  const e = hrEditing.emp ? HR.employee(hrEditing.emp) : null;
-  fillEmployeeFields(e);
-  FormDraft.banner($('#empModal .modal-body'), null);
-  toast('تم مسح النموذج');
 }
 
 function setCvProgress(loaded, total, label) {
@@ -303,7 +256,6 @@ function readFileAsDataUrl(file) {
 async function saveEmployeeForm() {
   if (hrEditing.empBusy) return;
   const file = $('#e-cv').files && $('#e-cv').files[0];
-  const draftKey = hrEditing.empDraftKey;
   let uploaded = null;
   setEmployeeFormBusy(true);
   try {
@@ -338,8 +290,7 @@ async function saveEmployeeForm() {
     }
     await HR.saveEmployee(payload);
     uploaded = null; // صار مرتبطاً بالموظف
-    FormDraft.clear(draftKey);
-    hrEditing.empDraftKey = null; // لا تُعِد كتابة مسودة بعد الحفظ
+    HR_DRAFTS.employee.done(); // المسودة تُحذف فقط بعد الحفظ الناجح
     closeModal('empModal');
     toast('تم حفظ ملف الموظف');
     renderEmployees();
@@ -401,6 +352,7 @@ function renderAttendance() {
         <th class="num">التاريخ</th><th>الموظف</th><th>الحالة</th><th>ملاحظة</th><th></th>
       </tr></thead><tbody>${rows}</tbody></table></div>
     </div>`;
+  hrDraftOpen('attendance');
 }
 async function saveAttendanceForm() {
   try {
@@ -411,6 +363,7 @@ async function saveAttendanceForm() {
       note: $('#att-note').value.trim(),
     });
     hrEditing.attMonth = $('#att-month').value || String($('#att-date').value).slice(0, 7);
+    HR_DRAFTS.attendance.done();
     toast('تم تسجيل الحضور');
     renderAttendance();
   } catch (e) { toast(errMsg(e), 'err'); }
@@ -452,6 +405,7 @@ function renderLeaves() {
         <th>الموظف</th><th>النوع</th><th class="num">الفترة</th><th class="num">الأيام</th><th>الحالة</th><th></th>
       </tr></thead><tbody>${rows}</tbody></table></div>
     </div>`;
+  hrDraftOpen('leave');
 }
 async function saveLeaveForm() {
   try {
@@ -463,6 +417,7 @@ async function saveLeaveForm() {
       note: $('#lv-note').value.trim(),
       status: 'pending',
     });
+    HR_DRAFTS.leave.done();
     toast('أُضيف طلب الإجازة');
     renderLeaves();
   } catch (e) { toast(errMsg(e), 'err'); }
@@ -505,6 +460,7 @@ function renderAdvances() {
         <th class="num">الأقساط</th><th class="num">المتبقي</th><th>الحالة</th><th></th>
       </tr></thead><tbody>${rows}</tbody></table></div>
     </div>`;
+  hrDraftOpen('advance');
 }
 
 async function ensureHrAccount(no, name, type) {
@@ -531,6 +487,7 @@ async function saveAdvanceForm() {
       cash_account_id: $('#adv-cash').value,
       description: $('#adv-desc').value.trim(),
     });
+    HR_DRAFTS.advance.done();
     toast('حُفظت السلفة كمسودة');
     renderAdvances();
   } catch (e) { toast(errMsg(e), 'err'); }
@@ -615,6 +572,7 @@ function renderPayroll() {
         <th class="num">خصم غياب</th><th class="num">تأمينات</th><th class="num">ضريبة</th><th class="num">سلفة</th><th class="num">الصافي</th>
       </tr></thead><tbody>${rows}</tbody></table></div>
     </div>`;
+  hrDraftOpen('payroll');
   hrEditing.preview = preview;
 }
 
@@ -666,6 +624,7 @@ async function postPayroll() {
     if (prev >= 0) HR.cache.payrolls[prev] = rec;
     else HR.cache.payrolls.push(rec);
     await HR.persist();
+    HR_DRAFTS.payroll.done();
     toast('تم ترحيل مسير الرواتب');
     hrEditing.payMonth = month;
     renderPayroll();
@@ -724,6 +683,7 @@ function renderEos() {
       </div>
       <p id="eos-note" class="hint" style="padding:0 16px 16px"></p>
     </div>`;
+  hrDraftOpen('eos');
 }
 function fillEos() {
   const emp = HR.employee($('#eos-emp').value);
@@ -763,6 +723,7 @@ async function postEos() {
     emp.eos_amount = amount;
     emp.eos_journal = no;
     await HR.persist();
+    HR_DRAFTS.eos.done();
     toast('تم ترحيل نهاية الخدمة');
     renderEos();
   } catch (e) { toast(errMsg(e), 'err'); }

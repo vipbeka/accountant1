@@ -46,6 +46,11 @@ function renderBudget(list, summary) {
   }
 }
 
+const BUDGET_DRAFT = Drafts.register({
+  module: 'budget', form: 'allocation', root: '#budgetModal', fields: [], recordId: () => 'all-accounts',
+  keyed: { selector: '.budget-input', id: el => el.dataset.id },
+});
+
 function openBudgetModal() {
   $('#alloc-table tbody').innerHTML = BUDGET_DATA.map(a => `
     <tr data-id="${a.id}">
@@ -53,6 +58,7 @@ function openBudgetModal() {
       <td class="num">${fmt(a.budget)}</td>
       <td class="num"><input type="number" step="0.01" class="budget-input" value="${a.budget}" data-id="${a.id}"></td>
     </tr>`).join('');
+  BUDGET_DRAFT.open();
   openModal('budgetModal');
 }
 
@@ -61,6 +67,7 @@ async function saveBudgetAlloc() {
   if (!items.length) return toast('لا توجد بيانات', 'err');
   try {
     await DB.bulkBudget(items);
+    BUDGET_DRAFT.done();
     closeModal('budgetModal');
     toast('تم تحديث الميزانيات بنجاح');
     loadBudget();

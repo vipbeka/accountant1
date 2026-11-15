@@ -4,6 +4,9 @@ let ACCOUNTS = [], editingId = null;
 
 const VKIND = { receipt: 'قبض', payment: 'صرف', salary: 'راتب' };
 
+// كل نوع سند له مسودته: draft_vouchers_voucher-receipt_create_new / ..._edit_<id>
+const V_DRAFT = Drafts.register({ module: 'vouchers', form: 'voucher', root: '#vModal', recordId: () => editingId });
+
 function onVKind() {
   const k = $('#v-kind').value;
   const pk = k === 'receipt' ? 'customer' : k === 'salary' ? 'employee' : 'vendor';
@@ -50,6 +53,7 @@ function newV(kind) {
   onVKind();
   const cash = findAccHint(ACCOUNTS, ['صندوق', 'نقد', 'بنك', '110']);
   if (cash) $('#v-cash').value = cash.id;
+  V_DRAFT.open({ form: 'voucher-' + kind });
   openModal('vModal');
 }
 
@@ -69,6 +73,7 @@ function editV(id) {
   $('#v-party').value = v.party_id || '';
   fillInvoices();
   $('#v-inv').value = v.invoice_id || '';
+  V_DRAFT.open({ form: 'voucher-' + v.kind });
   openModal('vModal');
 }
 
@@ -94,6 +99,7 @@ async function saveV(status) {
     if (v.cash_account_id === v.offset_account_id) return toast('الحسابان يجب أن يختلفا', 'err');
     v.status = 'draft';
     const saved = await EXT.saveVoucher(v);
+    V_DRAFT.done();
     if (status === 'posted') await postV(saved.id, true);
     else toast('تم حفظ المسودة في قاعدة البيانات');
     closeModal('vModal');

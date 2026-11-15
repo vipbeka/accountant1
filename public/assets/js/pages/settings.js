@@ -3,6 +3,17 @@
 let SIGS = [];
 let editingRegionId = null;
 
+/* بيانات المنشأة والضرائب + صفوف التواقيع الديناميكية */
+const COMPANY_DRAFT = Drafts.register({
+  module: 'settings', form: 'company', root: '#admin-settings', recordId: () => 'company',
+  exclude: [], resetIn: () => document.querySelector('#admin-settings .panel-body'), resetSmall: true,
+  custom: {
+    collect: () => $$('#sig-list .sig-row').map(r => ({ title: $('.sig-title', r).value, name: $('.sig-name', r).value })),
+    apply: rows => { if (Array.isArray(rows)) { SIGS = rows.filter(r => r && typeof r === 'object').map(r => ({ title: String(r.title || ''), name: String(r.name || '') })); renderSigs(); } },
+  },
+});
+const REGION_DRAFT = Drafts.register({ module: 'settings', form: 'region', root: '#regionModal', recordId: () => editingRegionId });
+
 function renderAdminPanels() {
   if (!(APP.isAdmin() || APP.isAccountsManager())) return;
   $('#admin-settings').innerHTML = `
@@ -38,6 +49,7 @@ function renderAdminPanels() {
   $('#s-bank').value = APP.settings.bank_details || '';
   SIGS = [...(APP.settings.signatures || [])];
   renderSigs();
+  COMPANY_DRAFT.open();
   $('#regions-panel').style.display = '';
   loadRegions();
 }
@@ -53,8 +65,11 @@ function renderSigs() {
     </div>`).join('');
   if (!SIGS.length) c.innerHTML = '<p class="empty-state">لا توجد تواقيع إضافية</p>';
 }
-function addSigRow() { SIGS.push({ title: '', name: '' }); renderSigs(); }
-function removeSigRow(i) { SIGS.splice(i, 1); renderSigs(); }
+function syncSigsFromDom() {
+  $$('#sig-list .sig-row').forEach(r => { const i = Number(r.dataset.i); if (SIGS[i]) SIGS[i] = { title: $('.sig-title', r).value, name: $('.sig-name', r).value }; });
+}
+function addSigRow() { syncSigsFromDom(); SIGS.push({ title: '', name: '' }); renderSigs(); }
+function removeSigRow(i) { syncSigsFromDom(); SIGS.splice(i, 1); renderSigs(); }
 
 async function upsertSetting(key, value) {
   const row = { key, value: value == null ? '' : String(value) };
@@ -95,6 +110,8 @@ async function saveSettings() {
     APP.settings.period_from = from;
     APP.settings.period_to = to;
     APP.settings.signatures = sigs;
+    COMPANY_DRAFT.done();
+    COMPANY_DRAFT.open(); // الحالة المحفوظة تصبح الأصل لأي تعديل لاحق
     const note = `تم الحفظ — الرقم الضريبي: ${tax || '—'} — السجل: ${reg || '—'} — العنوان: ${addr || '—'}`;
     toast('تم حفظ بيانات المنشأة');
     const el = $('#s-saved');
@@ -116,6 +133,7 @@ function openRegionModal(id, name) {
   editingRegionId = id || null;
   $('#region-modal-title').textContent = id ? 'تعديل المنطقة' : 'إضافة منطقة جديدة';
   $('#region-name').value = name || '';
+  REGION_DRAFT.open();
   openModal('regionModal');
 }
 async function loadRegions() {
@@ -144,6 +162,7 @@ async function saveRegion() {
   if (!name) return toast('اكتب اسم المنطقة', 'err');
   try {
     if (editingRegionId) await DB.renameRegion(editingRegionId, name); else await DB.addRegion(name);
+    REGION_DRAFT.done();
     closeModal('regionModal');
     toast(editingRegionId ? 'تم تعديل الاسم' : 'تمت الإضافة');
     loadRegions();

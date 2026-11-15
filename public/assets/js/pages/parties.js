@@ -21,6 +21,8 @@ document.getElementById('kind-tabs').addEventListener('click', e => {
   renderList();
 });
 
+const PARTY_DRAFT = Drafts.register({ module: 'parties', form: 'party', root: '#pModal', recordId: () => $('#p-id').value || null });
+
 function newParty() {
   $('#p-title').textContent = 'طرف جديد';
   $('#p-id').value = '';
@@ -31,6 +33,7 @@ function newParty() {
   $('#p-addr').value = '';
   $('#p-salary').value = '0';
   $('#p-notes').value = '';
+  PARTY_DRAFT.open();
   openModal('pModal');
 }
 
@@ -46,6 +49,7 @@ function editParty(id) {
   $('#p-addr').value = p.address || '';
   $('#p-salary').value = p.salary || 0;
   $('#p-notes').value = p.notes || '';
+  PARTY_DRAFT.open();
   openModal('pModal');
 }
 
@@ -61,6 +65,7 @@ async function saveParty() {
       salary: parseFloat($('#p-salary').value || 0),
       notes: $('#p-notes').value.trim(),
     });
+    PARTY_DRAFT.done();
     closeModal('pModal');
     toast('تم الحفظ في قاعدة البيانات');
     renderList();

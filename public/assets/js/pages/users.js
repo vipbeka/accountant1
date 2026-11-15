@@ -11,6 +11,11 @@ function handleUserErr(e) {
   toast(errMsg(e), 'err');
 }
 
+/* كلمات المرور وإجابات أسئلة الأمان لا تُخزَّن في المسودات أبداً */
+const USER_DRAFT = Drafts.register({ module: 'users', form: 'user', root: '#addModal', exclude: ['u-pass', 'u-ans'] });
+const SEC_DRAFT = Drafts.register({ module: 'users', form: 'security-question', root: '#secModal', exclude: ['sec-ans'], recordId: () => $('#sec-id').value || null });
+function openAddUser() { USER_DRAFT.open(); openModal('addModal'); }
+
 async function loadUsers() {
   try {
     const users = await DB.usersList();
@@ -46,6 +51,7 @@ async function addUser() {
       security_question: $('#u-q').value.trim(),
       security_answer: $('#u-ans').value.trim(),
     });
+    USER_DRAFT.done();
     closeModal('addModal');
     $('#u-name').value = $('#u-user').value = $('#u-pass').value = $('#u-q').value = $('#u-ans').value = '';
     toast('تمت إضافة المستخدم — يمكنه الدخول الآن باسم المستخدم وكلمة المرور');
@@ -56,6 +62,7 @@ async function addUser() {
 function setSecurity(id, username, question) {
   $('#sec-title').textContent = `سؤال الأمان لـ ${username}`;
   $('#sec-id').value = id; $('#sec-q').value = question || ''; $('#sec-ans').value = '';
+  SEC_DRAFT.open();
   openModal('secModal');
 }
 async function saveSecurity() {
@@ -64,6 +71,7 @@ async function saveSecurity() {
   if (!a) return toast('اكتب إجابة سؤال الأمان', 'err');
   try {
     await DB.callManageUsers({ action: 'set_security', user_id: $('#sec-id').value, security_question: q, security_answer: a });
+    SEC_DRAFT.done();
     closeModal('secModal');
     toast('تم حفظ سؤال الأمان');
     loadUsers();
